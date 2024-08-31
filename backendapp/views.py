@@ -14,10 +14,15 @@ from .serializers import (
     CustomTokenObtainPairSerializer, UserRegistrationSerializer, SendPasswordResetEmailSerializer
     , UserSerializer  , UserPasswordResetSerializer,
     SubscriptionSerializer, SubscriptionCreateSerializer , AIToolSerializer, LogSerializer, UserLoginSerializer
-    ,CreditSerializer, UserUpdateSerializer
+    ,CreditSerializer, UserUpdateSerializer, TransactionSerializer
 )
 from django.contrib.auth import authenticate
+from rest_framework.pagination import PageNumberPagination
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 # Generate Token Manually
 def get_tokens_for_user(user):
@@ -151,9 +156,17 @@ class TeamListView(APIView):
             return Response({"detail": "Not authorized to view this resource."}, status=status.HTTP_403_FORBIDDEN)
         
         teams = Team.objects.filter(org_admin=request.user)
-        # print('teams:', teams.first().team_name)
+        if not teams.exists():
+            return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
+        
         team_members = User.objects.filter(team=teams.first().team_name, role=User.ROLE_CHOICES[1][0].lower())
-        # team_members = User.objects.filter(role=User.ROLE_CHOICES[1][0].lower())
+        
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(team_members, request)
+        if page is not None:
+            serializer = UserSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
         serializer = UserSerializer(team_members, many=True)
         return Response(serializer.data)
 
@@ -367,36 +380,25 @@ class TransactionHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Check if the user is an Org Admin
-        if request.user.role == 'org_admin' and (request.user.team and request.user.team != 'no team'):
-            # Fetch transactions for a specific user in the Org Admin's team
-            user_ids = request.data.get('user_id')  # Get list of user IDs
+        paginator = StandardResultsSetPagination()
 
-            # Filter users by team and user_ids to get the specific users within the team
+        if request.user.role == 'org_admin' and (request.user.team and request.user.team != 'no team') or request.user.is_admin:
+            user_ids = request.data.get('user_id')  # Get list of user IDs
             users = User.objects.filter(team=request.user.team, id=user_ids)
             
             if not users.exists():
                 return Response({'error': 'No users found or users are not in your team'}, status=status.HTTP_404_NOT_FOUND)
             
-            # Fetch transactions for these users
             transactions = Transaction.objects.filter(credit__user__in=users)
         else:
-            # Show transactions for the current user (single client or team member)
             transactions = Transaction.objects.filter(credit__user=request.user)
 
-        return Response({
-            'transactions': [
-                {
-                    'transaction_type': transaction.transaction_type,
-                    'transaction_amount': transaction.amount,
-                    'description': transaction.description,
-                    'user_id': transaction.credit.user.id,
-                    'user_email': transaction.credit.user.email,
-                }
-                for transaction in transactions
-            ]
-        })
+        page = paginator.paginate_queryset(transactions, request)
+        if page is not None:
+            serializer = TransactionSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
 
+        return Response({'transactions': []})
 
 class SubscriptionListView(APIView):
     permission_classes = [AllowAny]
@@ -473,11 +475,25 @@ class AdminDashboardView(APIView):
         }
         return Response(data)
 
+# class AdminUserListView(APIView):
+#     permission_classes = [IsAuthenticated, IsAdminUser]
+
+#     def get(self, request):
+#         users = User.objects.all()
+#         serializer = UserSerializer(users, many=True)
+#         return Response(serializer.data)
+
 class AdminUserListView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request):
         users = User.objects.all()
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(users, request)
+        if page is not None:
+            serializer = UserSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
 
@@ -498,15 +514,24 @@ class DelegateAdminPrivilegesView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        
+
+
 class UserActivityLogView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
         logs = Log.objects.all()
+        paginator = StandardResultsSetPagination()
+        
+        page = paginator.paginate_queryset(logs, request)
+        if page is not None:
+            serializer = LogSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
         serializer = LogSerializer(logs, many=True)
         return Response(serializer.data)
-
+    
+    
 class GenerateReportView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -522,5 +547,11 @@ class GenerateReportView(APIView):
         if user_id:
             logs = logs.filter(user_id=user_id)
 
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(logs, request)
+        if page is not None:
+            serializer = LogSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
         serializer = LogSerializer(logs, many=True)
         return Response(serializer.data)
