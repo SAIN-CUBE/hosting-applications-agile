@@ -33,3 +33,4 @@ django-dotenv
 PyMuPDF
 shutilwhich
 python-multipart
+django-cors-headers
