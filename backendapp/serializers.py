@@ -40,34 +40,29 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         if data['password'] != data['password2']:
             raise serializers.ValidationError("Passwords do not match.")
 
-        role = data.get('role')
-
-        if role == 'org_admin':
-            # Automatically generate a team name using the user's email
-            generated_team_name = f"{data['email'].split('@')[0]} Team"
-            data['team'] = generated_team_name
-        else:
-            team_name = data.get('team')
-            if not team_name:
-                data['team'] = "no team"
-                # raise serializers.ValidationError("A team must be specified for this role.")
-            if not Team.objects.filter(team_name=team_name).exists():
-                raise serializers.ValidationError("The specified team does not exist.")
-
+        # Check if the email is in any team's pending_emails
+        email = data.get('email')
+        try:
+            team = Team.objects.get(pending_emails__icontains=email)
+            data['team'] = team.team_name
+            data['role'] = 'client'  # Assign role as 'client' automatically
+        except Team.DoesNotExist:
+            raise serializers.ValidationError("This email is not invited to any team.")
+        
         return data
 
     def create(self, validated_data):
-        # Remove password2 from validated data
         validated_data.pop('password2')
 
-        # Save the user without assigning a team yet
-        user_created = User.objects.create_user(**validated_data)
-        print("user created:",user_created)
-        user = User.objects.get(email=user_created)
+        # Create the user
+        user = User.objects.create_user(**validated_data)
 
-        # If the user is an org_admin, create a new team and assign the user as org_admin
-        if user.role == 'org_admin':
-          Team.objects.create(team_name=user.team, org_admin=user_created)
+        # Remove the email from the pending_emails of the team
+        team = Team.objects.get(team_name=user.team)
+        pending_emails = team.pending_emails.split(',')
+        pending_emails = [email.strip() for email in pending_emails if email.strip() != user.email]
+        team.pending_emails = ','.join(pending_emails)
+        team.save()
 
         # Create a Credit record for the user
         Credit.objects.create(user=user, total_credits=200, used_credits=0, remaining_credits=200)
@@ -82,7 +77,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             device_info=request.META.get('HTTP_USER_AGENT', 'Unknown device') if request else 'Unknown device'
         )
 
-        return user_created
+        return user
 
 
 class SendPasswordResetEmailSerializer(serializers.Serializer):

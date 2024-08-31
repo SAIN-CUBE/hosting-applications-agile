@@ -18,6 +18,10 @@ from .serializers import (
 )
 from django.contrib.auth import authenticate
 from rest_framework.pagination import PageNumberPagination
+from django.core.mail import EmailMessage
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
+from django.conf import settings
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
@@ -175,7 +179,7 @@ class AddTeamMemberView(APIView):
 
     def post(self, request):
         # Ensure the requesting user is an Org Admin
-        if request.user.role != 'org_admin' or request.user.is_admin:
+        if request.user.role != 'org_admin':
             return Response({"detail": "You do not have permission to add members to a team."}, status=status.HTTP_403_FORBIDDEN)
 
         # Get the team associated with the Org Admin
@@ -184,30 +188,44 @@ class AddTeamMemberView(APIView):
         except Team.DoesNotExist:
             return Response({"detail": "Your team does not exist or you are not authorized."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Automatically assign the team to the new member during registration
-        data = request.data.copy()
-        data['team'] = team.team_name  # Automatically assign the team of the Org Admin
-        data['role'] = 'client'
+        # Get the email from the request data
+        email = request.data.get('email')
+        print(email)
+        if not email:
+            return Response({"detail": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Proceed to register the new team member
-        serializer = UserRegistrationSerializer(data=data)
-        if serializer.is_valid():
-            user = serializer.save()
-            # team.members.add(user)  # Add the new user to the team
-            team.save()
-             # Log the addition action
-            ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
-            device_info = request.META.get('HTTP_USER_AGENT', 'Unknown device')
-            Log.objects.create(
-                user=request.user,
-                action=f"Added team member {user.email} by {request.user.email}",
-                ip_address=ip_address,
-                device_info=device_info
-            )
-            # user.save()
-            return Response({"msg":"User added successfully", "data":serializer.data}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_email(email)
+        except ValidationError:
+            return Response({"detail": "Invalid email address."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Check if the email is already a pending member
+        pending_emails = team.pending_emails.split(',') if team.pending_emails else []
+        if email in [e.strip() for e in pending_emails]:
+            return Response({"detail": "This email is already pending for your team."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Add the email to the team's pending_emails
+        pending_emails.append(email)
+        team.pending_emails = ','.join(pending_emails)
+        team.save()
+
+        # Send an invitation email to the new member
+        subject = "Invitation to join the team"
+        message = f"You have been invited to join the team {team.team_name}. Please register using the following link: /register"
+        send_email = EmailMessage(subject=subject, body=message, from_email=settings.EMAIL_HOST_USER, to=[email])
+        send_email.send(fail_silently=False)
+
+        # Log the addition action
+        ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
+        device_info = request.META.get('HTTP_USER_AGENT', 'Unknown device')
+        Log.objects.create(
+            user=request.user,
+            action=f"Added team member {email} to team {team.team_name}",
+            ip_address=ip_address,
+            device_info=device_info
+        )
+
+        return Response({"msg": "Invitation sent successfully."}, status=status.HTTP_201_CREATED)
 
 class UpdateTeamMemberView(APIView):
     permission_classes = [IsAuthenticated]
@@ -265,6 +283,9 @@ class DeleteTeamMemberView(APIView):
         # Proceed to delete the team member
         # team_member.delete()
         team_member.is_active = False
+        if team_member.email in team.pending_emails:
+            team.pending_emails.remove(team_member.email)
+            print("Team member deleted")
         team_member.save()
         
          # Log the deletion action before deleting the team member

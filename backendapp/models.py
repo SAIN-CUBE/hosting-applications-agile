@@ -63,25 +63,24 @@ class User(AbstractBaseUser):
 
 
 class Team(models.Model):
-    org_admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name='admin_teams')
+    # org_admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name="admins_team")
+    org_admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name="admins_team")
     team_name = models.CharField(max_length=100, unique=True)
     pending_emails = models.CharField(max_length=500, blank=True, help_text="Comma-separated emails")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        if not (self.org_admin.role == 'org_admin' or self.org_admin.is_superuser):
-            raise ValidationError('Only Org Admins or Superusers can create a team.')
+            # Ensure that pending_emails contains valid emails
+            if self.pending_emails:
+                emails = self.pending_emails.split(',')
+                for email in emails:
+                    email = email.strip()
+                    try:
+                        validate_email(email)
+                    except ValidationError:
+                        raise ValidationError(f"{email} is not a valid email address.")
         
-        if self.pending_emails:
-            emails = self.pending_emails.split(',')
-            for email in emails:
-                email = email.strip()
-                try:
-                    validate_email(email)
-                except ValidationError:
-                    raise ValidationError(f"{email} is not a valid email address.")
-    
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
