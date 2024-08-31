@@ -39,38 +39,50 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data['password'] != data['password2']:
             raise serializers.ValidationError("Passwords do not match.")
-        
-        team_name = data.get('team')
-        print("team_name:", team_name)
-        if team_name:
-            team_exists = Team.objects.filter(team_name=team_name).exists()
-            if not team_exists:
-                data['team'] = 'no team'  # Set the team to "no team" if it doesn't exist
-            else:
-                data['team'] = team_name
+
+        role = data.get('role')
+
+        if role == 'org_admin':
+            # Automatically generate a team name using the user's email
+            generated_team_name = f"{data['email'].split('@')[0]} Team"
+            data['team'] = generated_team_name
         else:
-            data['team'] = 'no team'  # Set to "no team" if no team name was provided
+            team_name = data.get('team')
+            if not team_name:
+                data['team'] = "no team"
+                # raise serializers.ValidationError("A team must be specified for this role.")
+            if not Team.objects.filter(team_name=team_name).exists():
+                raise serializers.ValidationError("The specified team does not exist.")
 
         return data
 
     def create(self, validated_data):
+        # Remove password2 from validated data
         validated_data.pop('password2')
-        user = User.objects.create_user(**validated_data)
-        
+
+        # Save the user without assigning a team yet
+        user_created = User.objects.create_user(**validated_data)
+        print("user created:",user_created)
+        user = User.objects.get(email=user_created)
+
+        # If the user is an org_admin, create a new team and assign the user as org_admin
+        if user.role == 'org_admin':
+          Team.objects.create(team_name=user.team, org_admin=user_created)
+
         # Create a Credit record for the user
         Credit.objects.create(user=user, total_credits=200, used_credits=0, remaining_credits=200)
-        
+
         # Log the user creation action
         request = self.context.get('request')
         ip_address = request.META.get('REMOTE_ADDR') if request else '0.0.0.0'
         Log.objects.create(
-            user=user, 
-            action='User created', 
+            user=user,
+            action='User created',
             ip_address=ip_address,
             device_info=request.META.get('HTTP_USER_AGENT', 'Unknown device') if request else 'Unknown device'
         )
 
-        return user
+        return user_created
 
 
 class SendPasswordResetEmailSerializer(serializers.Serializer):

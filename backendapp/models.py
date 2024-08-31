@@ -168,17 +168,3 @@ class AITool(models.Model):
 
     def __str__(self):
         return self.tool_name
-   
-    
-    
-    
-    
-    
-class TeamMember(models.Model):
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    is_admin = models.BooleanField(default=False)
-    joined_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.user.email} in {self.team.team_name}"
