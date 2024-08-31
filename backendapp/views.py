@@ -41,7 +41,8 @@ class LoginView(TokenObtainPairView):
         email = serializer.data.get('email')
         password = serializer.data.get('password')
         user = authenticate(email=email, password=password)
-        if user is not None:
+        print(user)
+        if user is not None and user.is_active==True:
             token = get_tokens_for_user(user)
             return Response({'token':token, 'msg':'Login Success'}, status=status.HTTP_200_OK)
         else:
@@ -147,7 +148,6 @@ class UserUpdateView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class TeamListView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -159,7 +159,7 @@ class TeamListView(APIView):
         if not teams.exists():
             return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
         
-        team_members = User.objects.filter(team=teams.first().team_name, role=User.ROLE_CHOICES[1][0].lower())
+        team_members = User.objects.filter(team=teams.first().team_name, role=User.ROLE_CHOICES[1][0].lower(), is_active=True)
         
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(team_members, request)
@@ -220,7 +220,7 @@ class UpdateTeamMemberView(APIView):
         # Retrieve the team managed by the Org Admin
         try:
             team = Team.objects.get(org_admin=request.user)
-            team_member = User.objects.get(id=id, team=team)
+            team_member = User.objects.get(id=id, team=team, is_active=True)
         except Team.DoesNotExist:
             return Response({"detail": "Your team does not exist or you are not authorized."}, status=status.HTTP_403_FORBIDDEN)
         except User.DoesNotExist:
@@ -256,14 +256,16 @@ class DeleteTeamMemberView(APIView):
         # Retrieve the team managed by the Org Admin
         try:
             team = Team.objects.get(org_admin=request.user)
-            team_member = User.objects.get(id=id, team=team)
+            team_member = User.objects.get(id=id, team=team, is_active=True)
         except Team.DoesNotExist:
             return Response({"detail": "Your team does not exist or you are not authorized."}, status=status.HTTP_403_FORBIDDEN)
         except User.DoesNotExist:
             return Response({"detail": "Team member not found."}, status=status.HTTP_404_NOT_FOUND)
         
         # Proceed to delete the team member
-        team_member.delete()
+        # team_member.delete()
+        team_member.is_active = False
+        team_member.save()
         
          # Log the deletion action before deleting the team member
         ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
@@ -376,6 +378,7 @@ class AssignCreditsView(APIView):
         else:
             return Response({'error': 'You do not have permission to access this resource.'}, status=status.HTTP_403_FORBIDDEN)
 
+
 class TransactionHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -475,14 +478,6 @@ class AdminDashboardView(APIView):
         }
         return Response(data)
 
-# class AdminUserListView(APIView):
-#     permission_classes = [IsAuthenticated, IsAdminUser]
-
-#     def get(self, request):
-#         users = User.objects.all()
-#         serializer = UserSerializer(users, many=True)
-#         return Response(serializer.data)
-
 class AdminUserListView(APIView):
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
@@ -513,7 +508,6 @@ class DelegateAdminPrivilegesView(APIView):
             return Response({'message': 'Admin privileges granted'})
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-        
 
 
 class UserActivityLogView(APIView):

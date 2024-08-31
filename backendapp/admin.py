@@ -8,8 +8,8 @@ class UserModelAdmin(BaseUserAdmin):
   # The fields to be used in displaying the User model.
   # These override the definitions on the base UserModelAdmin
   # that reference specific fields on auth.User.
-  list_display = ('id', 'email', 'first_name', 'last_name', 'phone_number', 'role', 'team', 'is_admin')
-  list_filter = ('is_admin',)
+  list_display = ('id', 'email', 'first_name', 'last_name', 'phone_number', 'role', 'team', 'is_admin', 'is_active')
+  list_filter = ('is_admin','is_active')
   fieldsets = (
       ('User Credentials', {'fields': ('email', 'password')}),
       ('Personal info', {'fields': ('first_name',)}),
@@ -17,17 +17,18 @@ class UserModelAdmin(BaseUserAdmin):
       ('Personal info', {'fields': ('phone_number',)}),
       ('Personal info', {'fields': ('role',)}),
       ('Permissions', {'fields': ('is_admin',)}),
+      ('Permissions', {'fields': ('is_active',)}),
   )
   # add_fieldsets is not a standard ModelAdmin attribute. UserModelAdmin
   # overrides get_fieldsets to use this attribute when creating a user.
   add_fieldsets = (
       (None, {
           'classes': ('wide',),
-          'fields': ('email', 'first_name', 'last_name', 'phone_number', 'role', 'password', 'password2'),
+          'fields': ('email', 'first_name', 'last_name', 'phone_number', 'role', 'password', 'password2', 'team'),
       }),
   )
   search_fields = ('email',)
-  ordering = ('email', 'id')
+  ordering = ('id', 'email')
   filter_horizontal = ()
 
 admin.site.register(User, UserModelAdmin)

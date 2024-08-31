@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Credit, Subscription, AITool, Log, Team
+from .models import Credit, Subscription, AITool, Log, Team, Transaction
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.encoding import smart_str, force_bytes, DjangoUnicodeDecodeError
@@ -187,3 +187,8 @@ class LogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Log
         fields = ['id', 'user', 'action', 'ip_address', 'timestamp', 'device_info']
+        
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ['transaction_type', 'amount', 'description', 'credit']
