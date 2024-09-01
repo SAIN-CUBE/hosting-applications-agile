@@ -2,7 +2,7 @@ from rest_framework import generics, status
 from django.db.models import Sum
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAdminUser
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -156,7 +156,7 @@ class TeamListView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        if request.user.role != 'org_admin':
+        if request.user.role.lower() != 'org_admin':
             return Response({"detail": "Not authorized to view this resource."}, status=status.HTTP_403_FORBIDDEN)
         
         teams = Team.objects.filter(org_admin=request.user)
@@ -179,7 +179,7 @@ class AddTeamMemberView(APIView):
 
     def post(self, request):
         # Ensure the requesting user is an Org Admin
-        if request.user.role != 'org_admin':
+        if request.user.role.lower() != 'org_admin':
             return Response({"detail": "You do not have permission to add members to a team."}, status=status.HTTP_403_FORBIDDEN)
 
         # Get the team associated with the Org Admin
@@ -232,7 +232,7 @@ class UpdateTeamMemberView(APIView):
 
     def put(self, request, id):
         # Ensure the requesting user is an Org Admin
-        if request.user.role != 'org_admin':
+        if request.user.role.lower() != 'org_admin':
             return Response({"detail": "You do not have permission to update team members."}, status=status.HTTP_403_FORBIDDEN)
         
         # Retrieve the team managed by the Org Admin
@@ -268,7 +268,7 @@ class DeleteTeamMemberView(APIView):
 
     def delete(self, request, id):
         # Ensure the requesting user is an Org Admin
-        if request.user.role != 'org_admin':
+        if request.user.role.lower() != 'org_admin':
             return Response({"detail": "You do not have permission to delete team members."}, status=status.HTTP_403_FORBIDDEN)
         
         # Retrieve the team managed by the Org Admin
@@ -323,7 +323,7 @@ class AssignCreditsView(APIView):
 
     def post(self, request):
         # Check if the user is an Org Admin or an Admin
-        if request.user.role == 'org_admin' or request.user.is_admin:
+        if request.user.role.lower() == 'org_admin' or request.user.is_admin:
             user_id = request.data.get('user_id')
             credits_to_add = int(request.data.get('credits', 0))
 
@@ -500,7 +500,7 @@ class AdminDashboardView(APIView):
         return Response(data)
 
 class AdminUserListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
@@ -532,7 +532,7 @@ class DelegateAdminPrivilegesView(APIView):
 
 
 class UserActivityLogView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         logs = Log.objects.all()

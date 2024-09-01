@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class RAGView(View):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         return JsonResponse({'message': 'Please use POST method to ask a question.'})
@@ -34,6 +34,8 @@ class RAGView(View):
 
         if not pdf_file:
             return JsonResponse({'error': 'No PDF file provided'}, status=400)
+        if not pdf_file.name.lower().endswith('.pdf'):
+            return JsonResponse({'error': 'The uploaded file must be a PDF.'}, status=400)
         if not question:
             return JsonResponse({'error': 'No question provided'}, status=400)
 
