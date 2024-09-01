@@ -115,7 +115,7 @@ class UserDashboardView(APIView):
         credit_data = CreditSerializer(credit).data if credit else None  # Serialize the Credit object
 
         dashboard_data = {
-            'name': user.first_name,
+            'name': user.first_name  + ' ' + user.last_name,
             'role': user.role,
             'email': user.email,
             'credits': credit_data 
@@ -232,7 +232,7 @@ class UpdateTeamMemberView(APIView):
 
     def put(self, request, id):
         # Ensure the requesting user is an Org Admin
-        if request.user.role != 'org_admin' or request.user.is_admin:
+        if request.user.role != 'org_admin':
             return Response({"detail": "You do not have permission to update team members."}, status=status.HTTP_403_FORBIDDEN)
         
         # Retrieve the team managed by the Org Admin
@@ -268,7 +268,7 @@ class DeleteTeamMemberView(APIView):
 
     def delete(self, request, id):
         # Ensure the requesting user is an Org Admin
-        if request.user.role != 'org_admin' or request.user.is_admin:
+        if request.user.role != 'org_admin':
             return Response({"detail": "You do not have permission to delete team members."}, status=status.HTTP_403_FORBIDDEN)
         
         # Retrieve the team managed by the Org Admin
@@ -322,36 +322,52 @@ class AssignCreditsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Check if the user is an Org Admin
-        if request.user.role == 'org_admin':
-            # Ensure the Org Admin has a team
-            if not request.user.team or request.user.team == 'no team':
-                return Response({'error': 'You do not have a team to manage credits.'}, status=status.HTTP_403_FORBIDDEN)
-            
-            # Process assigning credits
+        # Check if the user is an Org Admin or an Admin
+        if request.user.role == 'org_admin' or request.user.is_admin:
             user_id = request.data.get('user_id')
             credits_to_add = int(request.data.get('credits', 0))
 
             try:
                 user = User.objects.get(id=user_id)
 
-                # Ensure the user is a member of the same team as the Org Admin
-                if user.team != request.user.team:
-                    return Response({'error': 'User is not a member of your team.'}, status=status.HTTP_403_FORBIDDEN)
+                # If the user is an Org Admin, ensure they have a team and the user is in the same team
+                if request.user.role == 'org_admin':
+                    if not request.user.team or request.user.team == 'no team':
+                        return Response({'error': 'You do not have a team to manage credits.'}, status=status.HTTP_403_FORBIDDEN)
+                    if user.team != request.user.team:
+                        return Response({'error': 'User is not a member of your team.'}, status=status.HTTP_403_FORBIDDEN)
 
-                # Get the Org Admin's credit record
-                org_admin_credits = Credit.objects.get(user=request.user)
+                    # Get the credit record of the Org Admin
+                    org_admin_credits = Credit.objects.get(user=request.user)
 
-                # Check if the Org Admin has enough credits to assign
-                if org_admin_credits.remaining_credits < credits_to_add:
-                    return Response({'error': 'You do not have enough credits to assign.'}, status=status.HTTP_400_BAD_REQUEST)
+                    # Check if the Org Admin has enough credits to assign
+                    if org_admin_credits.remaining_credits < credits_to_add:
+                        return Response({'error': 'You do not have enough credits to assign.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Deduct the assigned credits from the Org Admin's credits
-                org_admin_credits.total_credits -= credits_to_add
-                org_admin_credits.remaining_credits -= credits_to_add
-                org_admin_credits.save()
+                    # Deduct the assigned credits from the Org Admin's credits
+                    org_admin_credits.total_credits -= credits_to_add
+                    org_admin_credits.remaining_credits -= credits_to_add
+                    org_admin_credits.save()
 
-                # Assign credits to the user
+                    # Create a transaction record for the Org Admin's deduction
+                    Transaction.objects.create(
+                        credit=org_admin_credits,
+                        transaction_type=Transaction.TransactionType.DEDUCTION,
+                        amount=credits_to_add,
+                        description=f'Credits deducted for assigning to {user.email}'
+                    )
+                    
+                    # Log the credit deduction action
+                    ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
+                    device_info = request.META.get('HTTP_USER_AGENT', 'Unknown device')
+                    Log.objects.create(
+                        user=request.user,
+                        action=f'Deducted {credits_to_add} credits from own account',
+                        ip_address=ip_address,
+                        device_info=device_info
+                    )
+
+                # Assign credits to the user (for both Org Admin and Admin)
                 credits, created = Credit.objects.get_or_create(user=user)
                 credits.total_credits += credits_to_add
                 credits.remaining_credits += credits_to_add
@@ -364,29 +380,13 @@ class AssignCreditsView(APIView):
                     amount=credits_to_add,
                     description=f'Credits assigned by {request.user.email}'
                 )
-
-                # Create a transaction record for the Org Admin's deduction
-                Transaction.objects.create(
-                    credit=org_admin_credits,
-                    transaction_type=Transaction.TransactionType.DEDUCTION,
-                    amount=credits_to_add,
-                    description=f'Credits deducted for assigning to {user.email}'
-                )
                 
-                 # Log the credit assignment action
+                # Log the credit assignment action
                 ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
                 device_info = request.META.get('HTTP_USER_AGENT', 'Unknown device')
                 Log.objects.create(
                     user=request.user,
                     action=f'Assigned {credits_to_add} credits to {user.email}',
-                    ip_address=ip_address,
-                    device_info=device_info
-                )
-
-                # Log the credit deduction action
-                Log.objects.create(
-                    user=request.user,
-                    action=f'Deducted {credits_to_add} credits from own account',
                     ip_address=ip_address,
                     device_info=device_info
                 )

@@ -11,80 +11,99 @@ from langchain.chains import RetrievalQA
 from langchain_huggingface import HuggingFaceEmbeddings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from io import BytesIO
 import warnings
 
 # Set your Groq API key
-os.environ["GROQ_API_KEY"] = "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"
-
-# Load the data
-pdf_file = "backendapp/An-executives-guide-to-AI.pdf"
-loader = PyPDFLoader(pdf_file)
-pages = loader.load()
+os.environ["GROQ_API_KEY"] = os.environ.get('GROQ_API_KEY')
 
 # Suppress warnings for deprecated methods
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-# Extract text from all pages
-text = "".join([page.page_content for page in pages])
-
-# Split the text
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-splits = text_splitter.split_text(text)
-
-# Create embeddings and FAISS vector store
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-vector_store = FAISS.from_texts(texts=splits, embedding=embeddings)
-
-# Initialize the ChatGroq model
-llm = ChatGroq(
-    model="llama3-groq-8b-8192-tool-use-preview",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-)
-
-# RAG Setup
-retriever = vector_store.as_retriever()
-
-# Create a chat prompt template
-prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a helpful assistant that answers questions based on the given context.",
-        ),
-        ("human", "Context: {context}\n\nQuestion: {question}"),
-    ]
-)
-
-# Create the RAG chain
-rag_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    chain_type="stuff",
-    retriever=retriever,
-    return_source_documents=True,
-    chain_type_kwargs={"prompt": prompt}
-)
-
 @method_decorator(csrf_exempt, name='dispatch')
 class RAGView(View):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+
     def get(self, request, *args, **kwargs):
         return JsonResponse({'message': 'Please use POST method to ask a question.'})
 
     def post(self, request, *args, **kwargs):
-
+        pdf_file = request.FILES.get('pdf')
         question = request.POST.get('question')
+
+        if not pdf_file:
+            return JsonResponse({'error': 'No PDF file provided'}, status=400)
         if not question:
             return JsonResponse({'error': 'No question provided'}, status=400)
 
-        start_time = time.time()
-        result = rag_chain.invoke({"query": question})
-        end_time = time.time()
+        # Save the uploaded PDF file temporarily
+        pdf_path = f"temp_{pdf_file.name}"
+        with open(pdf_path, 'wb') as f:
+            for chunk in pdf_file.chunks():
+                f.write(chunk)
 
-        return JsonResponse({
-            'result': result['result'],
-            'execution_time': f"{end_time - start_time} seconds"
-        })
+        try:
+            # Load the data from the uploaded PDF
+            loader = PyPDFLoader(pdf_path)
+            pages = loader.load()
+
+            # Extract text from all pages
+            text = "".join([page.page_content for page in pages])
+
+            # Split the text
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            splits = text_splitter.split_text(text)
+
+            # Create embeddings and FAISS vector store
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            vector_store = FAISS.from_texts(texts=splits, embedding=embeddings)
+
+            # RAG Setup
+            retriever = vector_store.as_retriever()
+
+            # Create a chat prompt template
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "You are a helpful assistant that answers questions based on the given context.",
+                    ),
+                    ("human", "Context: {context}\n\nQuestion: {question}"),
+                ]
+            )
+            
+            # Initialize the ChatGroq model
+            llm = ChatGroq(
+                model="llama3-groq-8b-8192-tool-use-preview",
+                temperature=0,
+                max_tokens=None,
+                timeout=None,
+                max_retries=2,
+            )
+            
+            # Create the RAG chain
+            rag_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": prompt}
+            )
+
+            # Run the question through the RAG chain
+            start_time = time.time()
+            result = rag_chain.invoke({"query": question})
+            end_time = time.time()
+
+            return JsonResponse({
+                'result': result['result'],
+                'execution_time': f"{end_time - start_time} seconds"
+            })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+        finally:
+            # Clean up the temporary file
+            os.remove(pdf_path)
