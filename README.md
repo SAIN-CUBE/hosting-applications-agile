@@ -25,6 +25,7 @@ This is an example of how to list things you need to use the software and how to
 - Python 3.9
 - pip (Python package manager)
 - Virtual environment (recommended)
+- For further understanding <a href="https://docs.google.com/document/d/1vA9SNH-JfCis48leWK9r03RCeK_sghlneFoCzvedCLg/edit?usp=sharing">View API Docs</a> and <a href="https://docs.google.com/document/d/1vA9SNH-JfCis48leWK9r03RCeK_sghlneFoCzvedCLg/edit?usp=sharing">Demo</a>
 
 
 ### Installation
