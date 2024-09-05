@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Team,  Credit, Transaction, Subscription, Log, AITool, TeamMember
+from .models import User, Team,  Credit, Transaction, Subscription, Log, AITool
 
 # Register your models here.
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
@@ -33,7 +33,6 @@ class UserModelAdmin(BaseUserAdmin):
 
 admin.site.register(User, UserModelAdmin)
 admin.site.register(Team)
-admin.site.register(TeamMember)
 admin.site.register(Credit)
 admin.site.register(Transaction)
 admin.site.register(Subscription)
