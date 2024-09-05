@@ -39,7 +39,7 @@ from rest_framework.permissions import IsAuthenticated
 class ExtractOCRView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     authentication_classes = []  # Disable authentication for simplicity
-    permission_classes = [IsAuthenticated]  # Disable permission for simplicity
+    permission_classes = []  # Disable permission for simplicity
     
 
     def post(self, request, format='jpg'):

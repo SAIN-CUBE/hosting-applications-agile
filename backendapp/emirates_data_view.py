@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore")
 
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesDataView(View):
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
     def get(self, request, *args, **kwargs):
         return JsonResponse({'message': 'Please use POST method to ask a question.'})
     def post(self, request, *args, **kwargs):
