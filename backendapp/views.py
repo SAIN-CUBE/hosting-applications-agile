@@ -1,4 +1,7 @@
+import random
+import requests
 from rest_framework import generics, status
+from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -22,6 +25,12 @@ from django.core.mail import EmailMessage
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.core.mail import send_mail
+from django.db import transaction
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
@@ -55,6 +64,127 @@ class LoginView(TokenObtainPairView):
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                # Create user account immediately, but set is_active to False
+                user = serializer.save(is_active=False)
+                otp = self.generate_otp()
+                user.otp = otp
+                user.save()
+
+                if self.send_otp_email(user.email, user.first_name, otp):
+                    return Response(
+                        {"message": "User registered. Please check your email for OTP to activate your account.", "user_id": user.id},
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    raise ValidationError("Failed to send OTP email.")
+            except Exception as e:
+                logger.error(f"Error in user registration: {str(e)}")
+                return Response(
+                    {"error": "An error occurred during registration. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def generate_otp(self):
+        return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+    def send_otp_email(self, email, first_name, otp):
+        url = "https://api.emailjs.com/api/v1.0/email/send"
+        data = {
+            "user_id": settings.EMAILJS_USER_ID,
+            "service_id": settings.EMAILJS_SERVICE_ID,
+            "template_id": settings.EMAILJS_TEMPLATE_ID,
+            "template_params": {
+                "to_email": email,
+                "to_name": first_name,
+                "otp": otp,
+            },
+            "accessToken": settings.EMAILJS_API_KEY    
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        try:
+            response = requests.post(url, json=data, headers=headers)
+            if response.status_code == 200:
+                logger.info(f"OTP email sent successfully to {email}")
+                return True
+            else:
+                logger.error(f"Error sending email to {email}: {response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Error sending email to {email}: {str(e)}")
+            return False
+
+class VerifyOTPView(generics.CreateAPIView):
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        user_id = request.data.get('user_id')
+        entered_otp = request.data.get('otp')
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.otp == entered_otp:
+            user.is_active = True
+            user.otp = None
+            user.save()
+            return Response({"message": "Account verified and activated successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+
+class ResendOTPView(generics.CreateAPIView):
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        user_id = request.data.get('user_id')
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        new_otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        user.otp = new_otp
+        user.save()
+
+        if self.send_otp_email(user.email, user.first_name, new_otp):
+            return Response({"message": "New OTP sent successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "Failed to send OTP"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def send_otp_email(self, email, first_name, otp):
+        # Use the same email sending logic as in RegisterView
+        url = "https://api.emailjs.com/api/v1.0/email/send"
+        data = {
+            "user_id": settings.EMAILJS_USER_ID,
+            "service_id": settings.EMAILJS_SERVICE_ID,
+            "template_id": settings.EMAILJS_TEMPLATE_ID,
+            "template_params": {
+                "to_email": email,
+                "to_name": first_name,
+                "otp": otp,
+            },
+            "accessToken": settings.EMAILJS_API_KEY    
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        try:
+            response = requests.post(url, json=data, headers=headers)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Error sending email to {email}: {str(e)}")
+            return False
+        
 
 class LogoutView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):

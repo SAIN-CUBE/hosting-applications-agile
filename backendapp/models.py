@@ -34,7 +34,6 @@ class User(AbstractBaseUser):
     last_name = models.CharField(max_length=30)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
-    # team = models.ForeignKey("Team", on_delete=models.SET_NULL, null=True, blank=True, related_name='members')  # Add team field
     team = models.CharField(max_length=50, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
@@ -42,12 +41,13 @@ class User(AbstractBaseUser):
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    otp = models.CharField(max_length=6, blank=True, null=True)  # Add this line
     
     objects = UserManager()
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['first_name', 'last_name', 'phone_number']
-
+    
     def __str__(self):
         return self.email
 

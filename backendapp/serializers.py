@@ -14,6 +14,7 @@ from django.conf import settings
 
 User = get_user_model()
 
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -34,35 +35,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('email', 'first_name', 'last_name', 'phone_number', 'password', 'password2', 'role', 'team')
+        fields = ('email', 'first_name', 'last_name', 'phone_number', 'password', 'password2')
 
     def validate(self, data):
         if data['password'] != data['password2']:
             raise serializers.ValidationError("Passwords do not match.")
-
-        # Check if the email is in any team's pending_emails
-        email = data.get('email')
-        try:
-            team = Team.objects.get(pending_emails__icontains=email)
-            data['team'] = team.team_name
-            data['role'] = 'client'  # Assign role as 'client' automatically
-        except Team.DoesNotExist:
-            raise serializers.ValidationError("This email is not invited to any team.")
-        
         return data
 
     def create(self, validated_data):
         validated_data.pop('password2')
+        validated_data['role'] = 'visitor'  # Set default role to 'visitor'
+        validated_data['team'] = 'no team'  # Set default team to 'no team'
 
-        # Create the user
         user = User.objects.create_user(**validated_data)
-
-        # Remove the email from the pending_emails of the team
-        team = Team.objects.get(team_name=user.team)
-        pending_emails = team.pending_emails.split(',')
-        pending_emails = [email.strip() for email in pending_emails if email.strip() != user.email]
-        team.pending_emails = ','.join(pending_emails)
-        team.save()
 
         # Create a Credit record for the user
         Credit.objects.create(user=user, total_credits=200, used_credits=0, remaining_credits=200)
@@ -78,8 +63,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         )
 
         return user
-
-
+    
+  
+    
+    
 class SendPasswordResetEmailSerializer(serializers.Serializer):
   email = serializers.EmailField(max_length=255)
   class Meta:
