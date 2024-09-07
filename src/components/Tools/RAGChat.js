@@ -82,37 +82,10 @@ export default function RAGChat() {
     }
   };
 
-  const handleFileUpload = async () => {
+  const handleFileUpload = () => {
     if (!file) return;
-    setProcessing(true);
-    try {
-      const formData = new FormData();
-      formData.append('pdf', file);
-
-      await axios.post('/api/tools/use/process-pdf/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        timeout: 60000, // 60 seconds timeout for processing
-      });
-
-      setChatReady(true);
-      setMessages([{ type: 'system', content: `File "${file.name}" is processed and ready. You can now start chatting!` }]);
-    } catch (error) {
-      console.error('Error processing file:', error);
-      let errorMessage = 'An error occurred while processing your file.';
-      if (error.response) {
-        errorMessage = `Server error: ${error.response.status}`;
-      } else if (error.request) {
-        errorMessage = 'No response received from server. Please try again.';
-      } else {
-        errorMessage = error.message;
-      }
-      setMessages([{ type: 'system', content: errorMessage }]);
-    } finally {
-      setProcessing(false);
-    }
+    setChatReady(true);
+    setMessages([{ type: 'system', content: `File "${file.name}" is ready. You can now start chatting!` }]);
   };
 
   const handleChangePDF = () => {
