@@ -1,8 +1,8 @@
 "use client";
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { EyeIcon, EyeSlashIcon, LockClosedIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
-import { motion } from 'framer-motion';
+import { EyeIcon, EyeSlashIcon, LockClosedIcon, EnvelopeIcon, PhoneIcon, UserIcon } from '@heroicons/react/24/outline';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -10,45 +10,20 @@ import * as yup from 'yup';
 import { Toaster, toast } from 'react-hot-toast';
 
 const schema = yup.object().shape({
+  first_name: yup.string().required('First name is required'),
+  last_name: yup.string().required('Last name is required'),
   email: yup.string().email('Invalid email').required('Email is required'),
-  password: yup.string().required('Password is required'),
+  phone_number: yup.string().matches(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number').required('Phone number is required'),
+  password: yup.string().min(8, 'Password must be at least 8 characters').required('Password is required'),
+  password2: yup.string().oneOf([yup.ref('password'), null], 'Passwords must match').required('Confirm password is required'),
 });
 
-const GoogleLogin = () => {
-  const router = useRouter();
-
-  const handleGoogleLogin = () => {
-    console.log('Google login clicked');
-    // This is a placeholder. In a real implementation, you'd initiate the OAuth flow here.
-    toast('Google login is not implemented yet.', {
-      duration: 3000,
-      position: 'top-center',
-      // You can add an icon or style to make it look like an info toast
-      icon: 'ℹ️',
-    });
-  };
-
-  return (
-    <button
-      onClick={handleGoogleLogin}
-      className="w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
-    >
-      <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-        <path
-          fill="currentColor"
-          d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
-        />
-      </svg>
-      Sign in with Google
-    </button>
-  );
-};
-
-const LoginPage = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+const SignUpPage = () => {
+  const { register, handleSubmit, formState: { errors }, setError } = useForm({
     resolver: yupResolver(schema),
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showPassword2, setShowPassword2] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -56,7 +31,7 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login/', {
+      const response = await fetch('/api/auth/register/', {  // Note the trailing slash
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -65,16 +40,14 @@ const LoginPage = () => {
       const result = await response.json();
 
       if (response.ok) {
-        // Store the token in localStorage or a secure cookie
-        localStorage.setItem('token', result.token.access);
-        
-        toast.success('Login successful! Redirecting...', {
+        toast.success('Registration successful! Please verify your email.', {
           duration: 3000,
           position: 'top-center',
         });
-        setTimeout(() => router.push('/dashboard'), 3000);
+        // Redirect to OTP verification page with user_id
+        router.push(`/verify-otp?user_id=${result.user_id}`);
       } else {
-        toast.error(result.errors?.non_field_errors?.[0] || 'Login failed. Please try again.', {
+        toast.error(result.error || 'Registration failed. Please try again.', {
           duration: 4000,
           position: 'top-center',
         });
@@ -100,8 +73,12 @@ const LoginPage = () => {
   `;
 
   const formFields = [
+    { name: 'first_name', type: 'text', placeholder: 'First name', icon: UserIcon },
+    { name: 'last_name', type: 'text', placeholder: 'Last name', icon: UserIcon },
     { name: 'email', type: 'email', placeholder: 'Email address', icon: EnvelopeIcon },
+    { name: 'phone_number', type: 'tel', placeholder: 'Phone number', icon: PhoneIcon },
     { name: 'password', type: 'password', placeholder: 'Password', icon: LockClosedIcon },
+    { name: 'password2', type: 'password', placeholder: 'Confirm Password', icon: LockClosedIcon },
   ];
 
   return (
@@ -111,7 +88,7 @@ const LoginPage = () => {
         initial={{ opacity: 0, y: -50 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="max-w-md w-full space-y-8 bg-gray-800 bg-opacity-50 backdrop-filter backdrop-blur-lg p-10 rounded-3xl shadow-2xl border border-gray-700"
+        className="max-w-xl w-full space-y-8 bg-gray-800 bg-opacity-50 backdrop-filter backdrop-blur-lg p-10 rounded-3xl shadow-2xl border border-gray-700"
       >
         <div className="text-center">
           <motion.div
@@ -122,15 +99,15 @@ const LoginPage = () => {
           >
             <LockClosedIcon className="w-14 h-14" />
           </motion.div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-            Sign in to your account
+          <h2 className="mt-6 text-center text-4xl font-extrabold text-white">
+            Create your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-300">
-            Welcome back! Please enter your details
+          <p className="mt-2 text-center text-xl text-gray-300">
+            Join us and experience the future of collaboration
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          <div className="space-y-6">
+        <form className="mt-8 -b space-y-6" onSubmit={handleSubmit(onSubmit)}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {formFields.map((field) => (
               <div key={field.name} className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-20">
@@ -139,19 +116,19 @@ const LoginPage = () => {
                 <div className="relative">
                   <input
                     id={field.name}
-                    type={field.name === 'password' ? (showPassword ? 'text' : 'password') : field.type}
+                    type={field.name.includes('password') ? ((field.name === 'password' ? showPassword : showPassword2) ? 'text' : 'password') : field.type}
                     autoComplete={field.name}
-                    className={`${inputClasses} ${errors[field.name] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-indigo-500'}`}
+                    className={`${inputClasses} ${errors[field.name] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-indigo-500 '}`}
                     placeholder={field.placeholder}
                     {...register(field.name)}
                   />
-                  {field.name === 'password' && (
+                  {field.name.includes('password') && (
                     <button
                       type="button"
                       className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-indigo-500 z-20 transition-colors duration-200"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={() => field.name === 'password' ? setShowPassword(!showPassword) : setShowPassword2(!showPassword2)}
                     >
-                      {showPassword ? (
+                      {(field.name === 'password' ? showPassword : showPassword2) ? (
                         <EyeSlashIcon className="h-5 w-5" />
                       ) : (
                         <EyeIcon className="h-5 w-5" />
@@ -159,41 +136,28 @@ const LoginPage = () => {
                     </button>
                   )}
                 </div>
-                {errors[field.name] && (
-                  <p className="text-red-400 text-xs mt-1 absolute">
-                    {errors[field.name].message}
-                  </p>
-                )}
+                <AnimatePresence>
+                  {errors[field.name] && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="text-red-400 text-xs mt-1 absolute"
+                    >
+                      {errors[field.name].message}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-300">
-                Remember me
-              </label>
-            </div>
-
-            <div className="text-sm">
-              <Link href="/reset-password" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
-                Forgot your password?
-              </Link>
-            </div>
-          </div>
-
-          <div className='pt-2'>
+          <div className='pt-4'>
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="submit"
-              className={`group relative w-full flex justify-center py-2 px-3 border border-transparent text-lg font-medium rounded-lg text-white transition-all duration-200 ${
+              className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-lg font-medium rounded-lg text-white transition-all duration-200 ${
                 isLoading
                   ? 'bg-indigo-400 cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
@@ -206,27 +170,14 @@ const LoginPage = () => {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
               ) : (
-                'Sign in'
+                'Create Account'
               )}
             </motion.button>
           </div>
         </form>
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-700"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-800 text-gray-300">Or continue with</span>
-            </div>
-          </div>
-          <div className="mt-6">
-            <GoogleLogin />
-          </div>
-        </div>
         <div className="text-center mt-4">
-          <Link href="/signup" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
-            Don't have an account? Sign up
+          <Link href="/login" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
+            Already have an account? Sign in
           </Link>
         </div>
       </motion.div>
@@ -234,4 +185,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default SignUpPage;

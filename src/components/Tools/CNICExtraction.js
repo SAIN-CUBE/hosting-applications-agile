@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useCallback, useRef } from 'react'
-import { DocumentTextIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon } from '@heroicons/react/24/outline'
+import React, { useState, useCallback, useRef } from 'react'
+import { DocumentTextIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
+import axios from 'axios'
 
 export default function MultiCNICExtraction() {
   const [files, setFiles] = useState([])
@@ -13,14 +14,11 @@ export default function MultiCNICExtraction() {
   const [activeTab, setActiveTab] = useState('tool')
   const videoRef = useRef(null)
   const fileInputRef = useRef(null)
-  const abortControllerRef = useRef(null)
 
   const onDrop = useCallback((acceptedFiles) => {
     if (processing) {
       // Cancel ongoing processing
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
+      axios.CancelToken.source().cancel('Operation canceled by the user.')
       setProcessing(false)
     }
     setFiles(prevFiles => [...prevFiles, ...acceptedFiles])
@@ -43,44 +41,35 @@ export default function MultiCNICExtraction() {
     setError(null);
     setResults([]);
     
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const cancelTokenSource = axios.CancelToken.source();
 
     try {
       const newResults = [];
       for (const file of files) {
-        if (signal.aborted) {
-          break;
-        }
-
         const formData = new FormData();
         formData.append('cnic', file);
 
-        const response = await fetch('/api/tools/use/cnic-data-extraction/', {
-          method: 'POST',
+        const response = await axios.post('/api/tools/use/cnic-data-extraction/', formData, {
           headers: {
+            'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
           },
-          body: formData,
-          signal: signal
+          cancelToken: cancelTokenSource.token,
+          timeout: 30000, // 30 seconds timeout
         });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        newResults.push({ fileName: file.name, data });
+        newResults.push({ fileName: file.name, data: response.data });
       }
-      if (!signal.aborted) {
-        setResults(newResults);
-      }
+      setResults(newResults);
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('Fetch aborted');
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+      } else if (error.code === 'ECONNABORTED') {
+        console.error('Request timed out:', error);
+        setError('Request timed out. Please try again.');
       } else {
         console.error('Error extracting CNIC data:', error);
-        setError('Failed to extract CNIC data. Please try again.');
+        setError(`Failed to extract CNIC data: ${error.message}`);
       }
     } finally {
       setProcessing(false);
@@ -96,9 +85,7 @@ export default function MultiCNICExtraction() {
     if (selectedFiles.length > 0) {
       if (processing) {
         // Cancel ongoing processing
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort()
-        }
+        axios.CancelToken.source().cancel('Operation canceled by the user.')
         setProcessing(false)
       }
       setFiles(prevFiles => [...prevFiles, ...selectedFiles])
@@ -113,6 +100,55 @@ export default function MultiCNICExtraction() {
 
   const totalCredits = files.length * 5
 
+  const ResultCard = ({ fileName, data }) => {
+    const [copied, setCopied] = useState(false);
+  
+    const formatKey = (key) => key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  
+    const copyToClipboard = (text) => {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    };
+  
+    const stringifyValue = (value) => {
+      if (typeof value === 'object' && value !== null) {
+        return Array.isArray(value)
+          ? `[${value.map(stringifyValue).join(', ')}]`
+          : `{${Object.entries(value).map(([k, v]) => `${formatKey(k)}: ${stringifyValue(v)}`).join(', ')}}`;
+      }
+      return String(value);
+    };
+  
+    const dataToDisplay = data.data || {};
+    const allDataString = Object.entries(dataToDisplay)
+      .map(([key, value]) => `${formatKey(key)}: ${stringifyValue(value)}`)
+      .join('\n');
+  
+    return (
+      <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden mb-6">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-white">{fileName}</h3>
+            <button
+              onClick={() => copyToClipboard(allDataString)}
+              className="text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              {copied ? <CheckIcon className="h-6 w-6" /> : <ClipboardIcon className="h-6 w-6" />}
+            </button>
+          </div>
+          <div className="bg-gray-700 p-5 rounded">
+            <div className="text-base leading-relaxed text-gray-200 whitespace-pre-wrap break-words">
+              {allDataString}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  
   const TabContent = () => {
     if (activeTab === 'tool') {
       return (
@@ -180,22 +216,19 @@ export default function MultiCNICExtraction() {
             </motion.div>
           )}
 
-          {results.length > 0 && (
+
+{results.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="mt-8 bg-gray-800/50 p-6 rounded-lg backdrop-blur-sm"
+              className="mt-12"
             >
-              <h4 className="text-lg font-semibold mb-4">Extracted Data:</h4>
-              {results.map((result, index) => (
-                <div key={index} className="mb-4">
-                  <h5 className="font-semibold text-blue-400">{result.fileName}</h5>
-                  <pre className="text-sm overflow-x-auto bg-gray-900/50 p-4 rounded">
-                    {JSON.stringify(result.data, null, 2)}
-                  </pre>
-                </div>
-              ))}
+              <div className="space-y-6">
+                {results.map((result, index) => (
+                  <ResultCard key={index} fileName={result.fileName} data={result.data} index={index} />
+                ))}
+              </div>
             </motion.div>
           )}
         </div>

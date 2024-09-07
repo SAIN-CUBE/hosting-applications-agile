@@ -15,9 +15,16 @@ import Link from 'next/link';
 import { FiLogOut } from 'react-icons/fi';
 
 const SidebarItem = React.memo(({ item, isActive, setActiveItem, isCollapsed, textVisible }) => {
+  const router = useRouter();
+
   const handleClick = useCallback(() => {
     setActiveItem(item.href);
-  }, [item.href, setActiveItem]);
+    router.prefetch(item.href);
+  }, [item.href, setActiveItem, router]);
+
+  useEffect(() => {
+    router.prefetch(item.href);
+  }, [router, item.href]);
 
   return (
     <Link
@@ -126,6 +133,7 @@ const Sidebar = () => {
     sidebarItems.forEach(item => {
       router.prefetch(item.href);
     });
+    router.prefetch('/login'); // Prefetch login page for logout action
   }, [router, sidebarItems]);
 
   return (
@@ -165,25 +173,6 @@ const Sidebar = () => {
           />
         ))}
       </nav>
-      <div className={`px-4 py-4 bg-gray-800/50 ${isCollapsed ? 'flex justify-center' : 'overflow-hidden'}`}>
-        {isCollapsed ? (
-          <ProcessingTimeCircle time={processingTime} />
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-4 pt-2 px-2">
-              <div>
-                <h3 className={`text-sm font-semibold text-gray-300 transition-opacity duration-300 ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
-                  Processing Time
-                </h3>
-                <p className={`text-xs text-gray-400 mb-3 mt-2 transition-opacity duration-300 ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
-                  Last update: 5m ago
-                </p>
-              </div>
-              <ProcessingTimeCircle time={processingTime} />
-            </div>
-          </>
-        )}
-      </div>
       <div className={`px-4 py-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
         <Link href="/login" passHref>
           <button className={`${isCollapsed ? 'p-1.5' : 'w-full px-3 py-1.5'} text-xs font-medium text-gray-300 bg-gray-800 rounded-lg hover:bg-gray-700 focus:outline-none transition-colors duration-200`}>

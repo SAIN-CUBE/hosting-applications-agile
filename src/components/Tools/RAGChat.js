@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatBubbleLeftEllipsisIcon, PaperAirplaneIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon } from '@heroicons/react/24/outline';
+import axios from 'axios';
 
 export default function RAGChat() {
   const [messages, setMessages] = useState([]);
@@ -12,7 +13,6 @@ export default function RAGChat() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const videoRef = useRef(null);
-
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -47,39 +47,72 @@ export default function RAGChat() {
       formData.append('pdf', file);
       formData.append('question', input);
 
-      const response = await fetch('/api/tools/use/chat-with-pdf/', {
-        method: 'POST',
+      const response = await axios.post('/api/tools/use/chat-with-pdf/', formData, {
         headers: {
+          'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         },
-        body: formData
+        timeout: 30000, // 30 seconds timeout
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data && data.result) {
-        const aiMessage = { type: 'ai', content: data.result };
+      if (response.data && response.data.result) {
+        const aiMessage = { type: 'ai', content: response.data.result };
         setMessages(prev => [...prev, aiMessage]);
       } else {
         throw new Error('Invalid response format');
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorMessage = { type: 'system', content: `An error occurred: ${error.message}` };
-      setMessages(prev => [...prev, errorMessage]);
+      let errorMessage = 'An error occurred while processing your request.';
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        errorMessage = `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        // The request was made but no response was received
+        errorMessage = 'No response received from server. Please try again.';
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        errorMessage = error.message;
+      }
+      const systemMessage = { type: 'system', content: errorMessage };
+      setMessages(prev => [...prev, systemMessage]);
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleFileUpload = () => {
+  const handleFileUpload = async () => {
     if (!file) return;
-    setChatReady(true);
-    setMessages([{ type: 'system', content: `File "${file.name}" is ready. You can now start chatting!` }]);
+    setProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append('pdf', file);
+
+      await axios.post('/api/tools/use/process-pdf/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        timeout: 60000, // 60 seconds timeout for processing
+      });
+
+      setChatReady(true);
+      setMessages([{ type: 'system', content: `File "${file.name}" is processed and ready. You can now start chatting!` }]);
+    } catch (error) {
+      console.error('Error processing file:', error);
+      let errorMessage = 'An error occurred while processing your file.';
+      if (error.response) {
+        errorMessage = `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        errorMessage = 'No response received from server. Please try again.';
+      } else {
+        errorMessage = error.message;
+      }
+      setMessages([{ type: 'system', content: errorMessage }]);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleChangePDF = () => {

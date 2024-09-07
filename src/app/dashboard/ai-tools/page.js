@@ -1,10 +1,10 @@
 "use client"
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import Layout from '@/app/dashboard/ai-tools/layout'
 import { CreditCardIcon, DocumentTextIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import AppBar from '@/components/Dashboard/AppBar'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 const tools = [
   {
@@ -62,40 +62,61 @@ export default function AITools() {
 }
 
 function ToolCard({ tool }) {
+  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
+
+  const handleClick = useCallback((e) => {
+    e.preventDefault()
+    setIsLoading(true)
+    router.prefetch(`/dashboard/ai-tools/${tool.id}`)
+    requestAnimationFrame(() => {
+      router.push(`/dashboard/ai-tools/${tool.id}`)
+    })
+  }, [router, tool.id])
+
   return (
-    <Link href={`/dashboard/ai-tools/${tool.id}`} className="block">
-      <motion.div
-        className="bg-gray-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out"
-        whileHover={{ y: -5 }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className={`h-2 bg-gradient-to-r ${tool.color}`} />
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <div className={`p-3 rounded-full bg-gradient-to-br ${tool.color}`}>
-                <tool.icon className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-4">
-                <h3 className="text-xl font-semibold">{tool.name}</h3>
-                <p className="text-sm text-gray-400">{tool.description}</p>
-              </div>
-            </div>
+    <motion.div
+      className="bg-gray-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out h-full cursor-pointer"
+      whileHover={{ y: -5 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      onClick={handleClick}
+    >
+      <div className={`h-2 bg-gradient-to-r ${tool.color}`} />
+      <div className="p-6 flex flex-col h-full relative">
+        <AnimatePresence>
+          {isLoading && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center"
+            >
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="flex items-center mb-4">
+          <div className={`p-3 rounded-full bg-gradient-to-br ${tool.color}`}>
+            <tool.icon className="h-6 w-6 text-white" />
           </div>
-          <div className="mt-4">
-            <p className="text-sm text-gray-400">
-              <span className="font-semibold">Requirements:</span> {tool.requirements}
-            </p>
-          </div>
-          <div className="mt-6 flex items-center justify-between">
-            <div className="bg-gray-700 px-3 py-1 rounded-full">
-              <p className="text-green-400 font-semibold">{tool.credits} credits</p>
-            </div>
+          <div className="ml-4">
+            <h3 className="text-xl font-semibold">{tool.name}</h3>
+            <p className="text-sm text-gray-400">{tool.description}</p>
           </div>
         </div>
-      </motion.div>
-    </Link>
+        <div className="mt-4 flex-grow">
+          <p className="text-sm text-gray-400">
+            <span className="font-semibold">Requirements:</span> {tool.requirements}
+          </p>
+        </div>
+        <div className="mt-6 flex items-center justify-between">
+          <div className="bg-gray-700 px-3 py-1 rounded-full">
+            <p className="text-green-400 font-semibold">{tool.credits} credits</p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   )
 }

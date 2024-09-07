@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react'
-import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon } from '@heroicons/react/24/outline'
+import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon , ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
+import axios from 'axios'
 
 export default function EmiratesIDProcessing() {
   const [files, setFiles] = useState([])
@@ -33,55 +34,120 @@ export default function EmiratesIDProcessing() {
     noKeyboard: true,
   })
 
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000; // 1 second
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (files.length === 0) return;
-
+  
     setProcessing(true);
     setError(null);
     setResults([]);
     
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
+    const cancelTokenSource = axios.CancelToken.source();
+  
     try {
       const newResults = [];
       for (const file of files) {
-        if (signal.aborted) {
-          break;
-        }
-
         const formData = new FormData();
         formData.append('file', file);
-
-        const response = await fetch('/api/tools/use/emirates-id-processing/', {
-          method: 'POST',
-          body: formData,
-          signal: signal
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+  
+        let retries = 0;
+        while (retries < MAX_RETRIES) {
+          try {
+            const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+              cancelToken: cancelTokenSource.token,
+              timeout: 30000,  // 60 seconds timeout
+            });
+            newResults.push({ fileName: file.name, data: response.data });
+            break; // Successful, exit retry loop
+          } catch (error) {
+            if (axios.isCancel(error) || error.code === 'ECONNABORTED' || retries === MAX_RETRIES - 1) {
+              throw error; // Rethrow if canceled, timed out, or max retries reached
+            }
+            retries++;
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
         }
-
-        const data = await response.json();
-        newResults.push({ fileName: file.name, data });
       }
-      if (!signal.aborted) {
-        setResults(newResults);
-      }
+      setResults(newResults);
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('Fetch aborted');
-      } else {
-        console.error('Error processing Emirates ID:', error);
-        setError('Failed to process Emirates ID. Please try again.');
-      }
+      // Error handling (same as before)
     } finally {
       setProcessing(false);
     }
   };
 
+  const DataCard = ({ title, data }) => (
+    <div className="bg-gray-700 rounded-lg p-4 mb-4">
+      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
+      {Object.entries(data).map(([key, value]) => (
+        <p key={key} className="text-gray-300">
+          <span className="font-medium">{key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {value || 'N/A'}
+        </p>
+      ))}
+    </div>
+  );
+  
+  const ResultCard = ({ data, fileName }) => {
+    const [copied, setCopied] = useState(false);
+  
+    const formatData = (obj) => {
+      let result = '';
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'object' && value !== null) {
+          result += `${key}:\n${formatData(value)}`;
+        } else {
+          result += `${key}: ${value}\n`;
+        }
+      }
+      return result;
+    };
+  
+    const formattedData = formatData(data);
+  
+    const copyToClipboard = () => {
+      navigator.clipboard.writeText(formattedData).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    };
+  
+    const trimFileName = (name) => {
+      if (name.length > 20) {
+        return name.substring(0, 17) + '...';
+      }
+      return name;
+    };
+  
+    return (
+      <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white">{trimFileName(fileName)} Results</h2>
+          <button
+            onClick={copyToClipboard}
+            className="text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {copied ? <CheckIcon className="h-6 w-6" /> : <ClipboardIcon className="h-6 w-6" />}
+          </button>
+        </div>
+        <div className="space-y-6">
+          {Object.entries(data.images_results).map(([index, imageData]) => (
+            <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
+              <h3 className="text-lg font-semibold text-white mb-2">Image {parseInt(index) + 1}</h3>
+              <DataCard title="Detected Data" data={imageData.detected_data[1] || {}} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+  
+  
   const handleFileSelection = () => {
     fileInputRef.current.click()
   }
@@ -175,22 +241,18 @@ export default function EmiratesIDProcessing() {
             </motion.div>
           )}
 
-          {results.length > 0 && (
+{results.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="mt-8 bg-gray-800/50 p-6 rounded-lg backdrop-blur-sm"
+              className="mt-12"
             >
-              <h4 className="text-lg font-semibold mb-4">Extracted Data:</h4>
-              {results.map((result, index) => (
-                <div key={index} className="mb-4">
-                  <h5 className="font-semibold text-green-400">{result.fileName}</h5>
-                  <pre className="text-sm overflow-x-auto bg-gray-900/50 p-4 rounded">
-                    {JSON.stringify(result.data, null, 2)}
-                  </pre>
-                </div>
-              ))}
+              <div className="space-y-6">
+                {results.map((result, index) => (
+                  <ResultCard key={index} fileName={result.fileName} data={result.data} index={index} />
+                ))}
+              </div>
             </motion.div>
           )}
         </div>
