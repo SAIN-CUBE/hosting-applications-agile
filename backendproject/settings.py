@@ -27,7 +27,7 @@ SECRET_KEY = "django-insecure-@=oc==f-t$$1!=lu1s+*w&4ai#_emx9w*v_@=lq+-yxmq6u(9k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['3.145.111.150','*']
+ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -162,12 +162,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "backendapp.User"
 
-EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_HOST_USER = os.environ.get('EMAIL_USER')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASS')
-EMAIL_USE_TLS = True
+EMAILJS_USER_ID = 'n4pfLBVQX_q5_4AIm'
+EMAILJS_SERVICE_ID = 'service_s1x4wki'
+EMAILJS_TEMPLATE_ID = 'template_8idkye6'
+EMAILJS_API_KEY = 'Xjh7T6r3OP3ZRqMn2BE8I'  # Add this line
+
+
 AUTHENTICATION_BACKENDS = (
     # Needed to login by username in Django admin, regardless of `allauth`
     "django.contrib.auth.backends.ModelBackend",
