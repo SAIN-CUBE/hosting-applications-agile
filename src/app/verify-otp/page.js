@@ -1,5 +1,5 @@
-"use client"
-import React, { useState, useEffect } from 'react';
+"use client";
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { toast, Toaster } from 'react-hot-toast';
 
@@ -7,6 +7,7 @@ const OTPVerificationPage = () => {
   const [otp, setOTP] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [userId, setUserId] = useState(null);
+  const inputRefs = useRef([]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -14,16 +15,66 @@ const OTPVerificationPage = () => {
     if (userIdParam) {
       setUserId(userIdParam);
     }
+    // Focus on the first input field when the component mounts
+    if (inputRefs.current[0]) {
+      inputRefs.current[0].focus();
+    }
   }, []);
 
   const handleChange = (element, index) => {
     if (isNaN(element.value)) return false;
 
-    setOTP([...otp.map((d, idx) => (idx === index ? element.value : d))]);
+    const newOTP = [...otp];
+    newOTP[index] = element.value;
+    setOTP(newOTP);
 
-    if (element.nextSibling) {
-      element.nextSibling.focus();
+    // Move to next input if current field is filled
+    if (element.value !== '' && index < 5) {
+      inputRefs.current[index + 1].focus();
     }
+  };
+
+  const handleKeyDown = (e, index) => {
+    switch (e.key) {
+      case 'Backspace':
+        // Move to previous input on backspace if current field is empty
+        if (index > 0 && otp[index] === '') {
+          inputRefs.current[index - 1].focus();
+        }
+        break;
+      case 'ArrowLeft':
+        // Move to previous input on left arrow key
+        if (index > 0) {
+          e.preventDefault();
+          inputRefs.current[index - 1].focus();
+        }
+        break;
+      case 'ArrowRight':
+        // Move to next input on right arrow key
+        if (index < 5) {
+          e.preventDefault();
+          inputRefs.current[index + 1].focus();
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').slice(0, 6).split('');
+    const newOTP = [...otp];
+    pastedData.forEach((value, index) => {
+      if (index < 6 && !isNaN(value)) {
+        newOTP[index] = value;
+      }
+    });
+    setOTP(newOTP);
+    // Focus on the next empty input or the last input
+    const nextEmptyIndex = newOTP.findIndex(val => val === '');
+    const focusIndex = nextEmptyIndex === -1 ? 5 : nextEmptyIndex;
+    inputRefs.current[focusIndex].focus();
   };
 
   const handleSubmit = async (e) => {
@@ -32,6 +83,12 @@ const OTPVerificationPage = () => {
 
     if (!userId) {
       toast.error('User ID is missing. Please try registering again.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (otp.some(digit => digit === '')) {
+      toast.error('Please enter the complete OTP.');
       setIsLoading(false);
       return;
     }
@@ -53,10 +110,13 @@ const OTPVerificationPage = () => {
       if (response.ok) {
         toast.success('Account verified successfully!');
         setTimeout(() => {
-          window.location.href = '/login';  // Redirect to login page after successful verification
+          window.location.href = '/login';
         }, 2000);
       } else {
         toast.error(data.error || 'Verification failed. Please try again.');
+        // Clear OTP fields on error
+        setOTP(['', '', '', '', '', '']);
+        inputRefs.current[0].focus();
       }
     } catch (error) {
       toast.error('An error occurred. Please try again.');
@@ -86,6 +146,9 @@ const OTPVerificationPage = () => {
 
       if (response.ok) {
         toast.success('New OTP sent to your email.');
+        // Clear OTP fields
+        setOTP(['', '', '', '', '', '']);
+        inputRefs.current[0].focus();
       } else {
         toast.error(data.error || 'Failed to resend OTP. Please try again.');
       }
@@ -116,11 +179,14 @@ const OTPVerificationPage = () => {
             {otp.map((data, index) => (
               <input
                 key={index}
+                ref={el => inputRefs.current[index] = el}
                 type="text"
                 maxLength="1"
                 className="w-12 h-12 text-center text-2xl font-bold text-white bg-gray-700 border-2 border-gray-600 rounded-lg focus:outline-none focus:border-indigo-500 transition-all duration-200"
                 value={data}
                 onChange={(e) => handleChange(e.target, index)}
+                onKeyDown={(e) => handleKeyDown(e, index)}
+                onPaste={handlePaste}
                 onFocus={(e) => e.target.select()}
               />
             ))}
