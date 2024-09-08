@@ -4,6 +4,7 @@ import cv2
 import shutil
 import warnings
 import numpy as np
+import logging
 from io import BytesIO
 from PIL import Image
 from datetime import datetime
@@ -16,6 +17,17 @@ import easyocr
 import fitz  # PyMuPDF
 from rest_framework.permissions import IsAuthenticated
 
+# Setup logging configuration
+logging.basicConfig(
+    filename='emirates_data_view.log',  # Log to file
+    level=logging.DEBUG,  # Set the lowest-severity log message level
+    format='%(asctime)s %(levelname)s: %(message)s',  # Log format
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Create logger
+logger = logging.getLogger(__name__)
+
 warnings.filterwarnings("ignore")
 
 
@@ -27,37 +39,37 @@ class EmiratesDataView(View):
         return JsonResponse({'message': 'Please use POST method to ask a question.'})
 
     def post(self, request, *args, **kwargs):
-        print("Starting POST request processing...")
+        logger.info("Starting POST request processing...")
         start_time = time.time()
         file = request.FILES.get('file')
 
         if file is None:
-            print("No file was provided in the request.")
+            logger.warning("No file was provided in the request.")
             return JsonResponse({"error": "No file was provided in the request."}, status=400)
 
-        print("File received:", file.name)
+        logger.info(f"File received: {file.name}")
 
         # Initialize models and readers
         models = self.initialize_models()
         rotation_map = {'0': 0, '90': 270, '180': 180, '270': 90}
-        
+
         try:
             temp_file_path = self.save_temp_file(file)
-            print(f"File saved temporarily at: {temp_file_path}")
+            logger.info(f"File saved temporarily at: {temp_file_path}")
 
             processed_files = self.process_file(temp_file_path, rotation_map, models)
 
             image_results = self.process_images(processed_files, models)
-            
+
             processing_time = time.time() - start_time
-            print(f"Processing completed in {processing_time:.2f} seconds")
+            logger.info(f"Processing completed in {processing_time:.2f} seconds")
 
             response_data = self.build_response(image_results, processing_time)
 
             return JsonResponse(response_data)
 
         except Exception as e:
-            print(f"Error during processing: {str(e)}")
+            logger.error(f"Error during processing: {str(e)}", exc_info=True)
             return JsonResponse({"error": str(e)}, status=500)
 
         finally:
@@ -65,7 +77,7 @@ class EmiratesDataView(View):
 
     @staticmethod
     def initialize_models():
-        print("Initializing YOLO models and EasyOCR readers...")
+        logger.info("Initializing YOLO models and EasyOCR readers...")
         return {
             'driving_model': YOLO(r'backendapp/em_models/driving_front_back.pt'),
             'id_model': YOLO(r'backendapp/em_models/ID_front_back.pt'),
@@ -82,18 +94,21 @@ class EmiratesDataView(View):
         with open(temp_file_path, "wb") as buffer:
             for chunk in file.chunks():
                 buffer.write(chunk)
+        logger.info(f"Temporary file saved at {temp_file_path}")
         return temp_file_path
 
     def process_file(self, file_path, rotation_map, models):
-        print(f"Processing file: {file_path}")
+        logger.debug(f"Processing file: {file_path}")
         if file_path.endswith('.pdf'):
+            logger.info("Detected PDF file format.")
             return self.process_pdf(file_path)
         else:
+            logger.info("Detected image file format.")
             return self.process_image(file_path, models['id_model'], rotation_map)
 
     @staticmethod
     def process_pdf(pdf_path):
-        print(f"Processing PDF file: {pdf_path}")
+        logger.info(f"Processing PDF file: {pdf_path}")
         doc = fitz.open(pdf_path)
         image_paths = []
         pdf_images_dir = 'pdf_images'
@@ -105,11 +120,11 @@ class EmiratesDataView(View):
             img_path = os.path.join(pdf_images_dir, f"{os.path.splitext(os.path.basename(pdf_path))[0]}_page_{i + 1}.png")
             pix.save(img_path)
             image_paths.append(img_path)
-            print(f"Extracted image from PDF page {i + 1}: {img_path}")
+            logger.debug(f"Extracted image from PDF page {i + 1}: {img_path}")
         return image_paths
 
     def process_image(self, image_path, model, rotation_map):
-        print(f"Processing image: {image_path}")
+        logger.debug(f"Processing image: {image_path}")
         results = model(source=image_path, save=True, conf=0.5)
         processed_images = []
 
@@ -122,7 +137,7 @@ class EmiratesDataView(View):
     def handle_image_inference(result, image_idx, rotation_map):
         img = Image.open(result.path)
         processed_images = []
-        print(f"Model inference result on image {image_idx}: {result.path}")
+        logger.debug(f"Model inference result on image {image_idx}: {result.path}")
 
         for j, box in enumerate(result.boxes.xyxy):
             class_idx = int(result.boxes.cls[j].item())
@@ -148,6 +163,7 @@ class EmiratesDataView(View):
             cropped_img, oriented_img_path = EmiratesDataView.crop_and_orient_image(
                 img, (xmin, ymin, xmax, ymax), doc_type, side, orient, j, rotation_map, cropped_dir, oriented_dir
             )
+            logger.debug(f"Cropped and oriented image saved: {oriented_img_path}")
             processed_images.extend([cropped_img, oriented_img_path])
         else:
             processed_images.append(EmiratesDataView.save_non_cropped_image(img, parts, j, cropped_dir, oriented_dir))
@@ -206,6 +222,7 @@ class EmiratesDataView(View):
                     },
                     "detected_data": detected_info
                 })
+                logger.info(f"Processed {doc_type} document: {img_path}")
         return image_results
 
     @staticmethod
@@ -236,9 +253,9 @@ class EmiratesDataView(View):
 
     @staticmethod
     def cleanup(temp_file_path):
-        print("Cleaning up temporary files and directories...")
+        logger.info("Cleaning up temporary files and directories...")
         os.remove(temp_file_path)
         shutil.rmtree('cropped_images', ignore_errors=True)
         shutil.rmtree('oriented_images', ignore_errors=True)
         shutil.rmtree('pdf_images', ignore_errors=True)
-        print("Cleanup completed.")
+        logger.info("Cleanup completed.")
