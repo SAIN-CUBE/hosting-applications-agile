@@ -82,41 +82,45 @@ export default function EmiratesIDProcessing() {
     }
   };
 
-  const DataCard = ({ title, data }) => (
-    <div className="bg-gray-700 rounded-lg p-4 mb-4">
-      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-      {Object.entries(data).map(([key, value]) => (
-        <p key={key} className="text-gray-300">
-          <span className="font-medium">{key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {value || 'N/A'}
-        </p>
-      ))}
-    </div>
-  );
-  
-  const ResultCard = ({ data, fileName }) => {
+  const DataCard = ({ title, data, onCopy }) => {
     const [copied, setCopied] = useState(false);
   
     const formatData = (obj) => {
-      let result = '';
-      for (const [key, value] of Object.entries(obj)) {
-        if (typeof value === 'object' && value !== null) {
-          result += `${key}:\n${formatData(value)}`;
-        } else {
-          result += `${key}: ${value}\n`;
-        }
-      }
-      return result;
+      return Object.entries(obj)
+        .map(([key, value]) => `${key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: ${value || 'N/A'}`)
+        .join('\n');
     };
   
-    const formattedData = formatData(data);
-  
-    const copyToClipboard = () => {
+    const handleCopy = () => {
+      const formattedData = formatData(data);
       navigator.clipboard.writeText(formattedData).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       });
+      onCopy();
     };
   
+    return (
+      <div className="bg-gray-700 rounded-lg p-4 mb-4">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <button
+            onClick={handleCopy}
+            className="text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {copied ? <CheckIcon className="h-5 w-5" /> : <ClipboardIcon className="h-5 w-5" />}
+          </button>
+        </div>
+        {Object.entries(data).map(([key, value]) => (
+          <p key={key} className="text-gray-300">
+            <span className="font-medium">{key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {value || 'N/A'}
+          </p>
+        ))}
+      </div>
+    );
+  };
+  
+  const ResultCard = ({ data, fileName }) => {
     const trimFileName = (name) => {
       if (name.length > 20) {
         return name.substring(0, 17) + '...';
@@ -126,27 +130,22 @@ export default function EmiratesIDProcessing() {
   
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-white">{trimFileName(fileName)} Results</h2>
-          <button
-            onClick={copyToClipboard}
-            className="text-gray-400 hover:text-gray-200 transition-colors"
-          >
-            {copied ? <CheckIcon className="h-6 w-6" /> : <ClipboardIcon className="h-6 w-6" />}
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-white mb-4">{trimFileName(fileName)} Results</h2>
         <div className="space-y-6">
-          {Object.entries(data.images_results).map(([index, imageData]) => (
+          {data.images_results.map((imageResult, index) => (
             <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
-              <h3 className="text-lg font-semibold text-white mb-2">Image {parseInt(index) + 1}</h3>
-              <DataCard title="Detected Data" data={imageData.detected_data[1] || {}} />
+              <h3 className="text-lg font-semibold text-white mb-2">Image {index + 1}</h3>
+              <DataCard 
+                title="Detected Data" 
+                data={imageResult.detected_data} 
+                onCopy={() => console.log(`Copied data for Image ${index + 1}`)}
+              />
             </div>
           ))}
         </div>
       </div>
     );
-  };
-  
+  };  
   
   const handleFileSelection = () => {
     fileInputRef.current.click()
