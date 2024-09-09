@@ -14,11 +14,12 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.permissions import IsAuthenticated
+from .logger.logger import logging
 import warnings
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.DEBUG)
+# logger = logging.getLogger(__name__)
 
 # Set your Groq API key
 os.environ["GROQ_API_KEY"] = os.environ.get('GROQ_API_KEY')
@@ -47,6 +48,8 @@ class RAGView(View):
 
             # Process the filename
             filename = pdf_file.name
+            logging.info(f"Pdf uploaded: {filename}")
+            logging.info(f"Query asked by user {question}")
             # Replace spaces with underscores
             filename = filename.replace(' ', '_')
             # Remove any characters that aren't alphanumeric, underscore, or period
@@ -71,7 +74,7 @@ class RAGView(View):
 
             # Extract text from all pages
             text = "".join([page.page_content for page in pages])
-            logger.debug(f"Extracted text length: {len(text)}")
+            logging.info(f"Extracted text length: {len(text)}")
 
             if not text:
                 raise ValueError("No text extracted from the PDF")
@@ -79,7 +82,7 @@ class RAGView(View):
             # Split the text
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             splits = text_splitter.split_text(text)
-            logger.debug(f"Number of text splits: {len(splits)}")
+            logging.info(f"Number of text splits: {len(splits)}")
 
             if not splits:
                 raise ValueError("No text splits generated")
@@ -119,6 +122,8 @@ class RAGView(View):
             start_time = time.time()
             result = rag_chain.invoke({"query": question})
             end_time = time.time()
+            
+            logging.info(f"Response: {result['result']}")
 
             return JsonResponse({
                 'result': result['result'],
@@ -126,10 +131,10 @@ class RAGView(View):
             })
 
         except ValueError as ve:
-            logger.error(f"ValueError in RAGView: {str(ve)}")
+            logging.info(f"ValueError in RAGView: {str(ve)}")
             return JsonResponse({'error': str(ve)}, status=400)
         except Exception as e:
-            logger.error(f"Error in RAGView: {str(e)}", exc_info=True)
+            logging.info(f"Error in RAGView: {str(e)}", exc_info=True)
             return JsonResponse({'error': 'An unexpected error occurred. Please try again later.'}, status=500)
 
         finally:
@@ -138,4 +143,4 @@ class RAGView(View):
                 try:
                     os.remove(pdf_path)
                 except Exception as e:
-                    logger.error(f"Error removing temporary file: {str(e)}")
+                    logging.info(f"Error removing temporary file: {str(e)}")

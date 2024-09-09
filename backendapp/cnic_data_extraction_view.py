@@ -18,6 +18,7 @@ from .model import Model
 from .utils import CTCLabelConverter
 import easyocr
 from rest_framework.permissions import IsAuthenticated
+from .logger.logger import logging
 
 # Load Urdu glyphs
 with open("backendapp/models/UrduGlyphs.txt", "r", encoding="utf-8") as file:
@@ -34,6 +35,8 @@ urdu_detection_model = YOLO("backendapp/models/yolov8m_UrduDoc.pt")
 
 # Model for detecting 'chip' class
 chip_detection_model = YOLO("backendapp/models/best.pt")
+
+logging.info(f"Models loaded for cnic data extraction...")
 
 
 class ExtractOCRView(APIView):
@@ -63,6 +66,7 @@ class ExtractOCRView(APIView):
         
         file = request.FILES.get('cnic')
         print("file uploaded")
+        logging.info(f"File uploaded: {file} for cnic data extraction...")
 
         # Check if the file is present in the request
         if file is None:
@@ -101,6 +105,7 @@ class ExtractOCRView(APIView):
 
             if chip_boxes:
                 # Perform English OCR
+                logging.info(f"English data detection started for cnic data extraction...")
                 gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
                 ocr_results = self.perform_ocr(gray, ['en'])
                 texts = [text for (_, text, _) in ocr_results]
@@ -108,6 +113,7 @@ class ExtractOCRView(APIView):
                 response_data["data"] = cnic_data
             else:
                 # Perform Urdu OCR
+                logging.info(f"Urdu data detection started for cnic data extraction...")
                 detection_results = urdu_detection_model.predict(source=image, conf=0.5, imgsz=1280, save=False, nms=True, device=urdu_device)
                 bounding_boxes = detection_results[0].boxes.xyxy.cpu().numpy().tolist()
                 bounding_boxes.sort(key=lambda x: x[1])
@@ -148,11 +154,13 @@ class ExtractOCRView(APIView):
         return img_np
 
     def perform_ocr(self, image_bytes, languages):
+        logging.info(f"Performing ocr for cnic data extraction...")
         reader = easyocr.Reader(languages)
         result = reader.readtext(image_bytes)
         return result
 
     def extract_cnic_data(self, ocr_text):
+        logging.info(f"Extracting cnic data for cnic data extraction...")
         cnic_data = {
             "Name": "",
             "Father_Name": "",
@@ -201,13 +209,16 @@ class ExtractOCRView(APIView):
 
         # Remove empty fields
         cnic_data = {key: value for key, value in cnic_data.items() if value}
+        logging.info(f"Extracted data for cnic data extraction...")
+        logging.info(f"Data: {cnic_data}")
 
         return cnic_data
 
     def format_translated_text(self, translated_text):
         permanent_address = ""
         current_address = ""
-
+        
+        logging.info(f"Formatting translating text for cnic data extraction...")
         lines = translated_text.split("\n")
 
         for line in lines:
@@ -221,4 +232,5 @@ class ExtractOCRView(APIView):
         for i, line in enumerate(formatted_lines):
             formatted_data[f"Line_{i+1}"] = line
 
+        logging.info(f"Done formatting translating text for cnic data extraction...")
         return formatted_data
