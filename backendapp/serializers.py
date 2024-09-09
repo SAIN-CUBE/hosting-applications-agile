@@ -40,18 +40,22 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data['password'] != data['password2']:
             raise serializers.ValidationError("Passwords do not match.")
+        
+        # Check if user with this email already exists
+        if User.objects.filter(email=data['email']).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        
         return data
 
     def create(self, validated_data):
         validated_data.pop('password2')
         validated_data['role'] = 'visitor'  # Set default role to 'visitor'
         validated_data['team'] = 'no team'  # Set default team to 'no team'
-
         user = User.objects.create_user(**validated_data)
-
+        
         # Create a Credit record for the user
         Credit.objects.create(user=user, total_credits=200, used_credits=0, remaining_credits=200)
-
+        
         # Log the user creation action
         request = self.context.get('request')
         ip_address = request.META.get('REMOTE_ADDR') if request else '0.0.0.0'
@@ -61,11 +65,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             ip_address=ip_address,
             device_info=request.META.get('HTTP_USER_AGENT', 'Unknown device') if request else 'Unknown device'
         )
-
+        
         return user
-    
   
-    
     
 class SendPasswordResetEmailSerializer(serializers.Serializer):
   email = serializers.EmailField(max_length=255)
