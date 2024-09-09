@@ -13,7 +13,7 @@ const schema = yup.object().shape({
   first_name: yup.string().required('First name is required'),
   last_name: yup.string().required('Last name is required'),
   email: yup.string().email('Invalid email').required('Email is required'),
-  phone_number: yup.string().matches(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number').required('Phone number is required'),
+  phone_number: yup.string().matches(/^((\+\d{1,2}\s?)?1?\-?\.?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|03\d{2}[\s.-]?\d{7})$/, 'Invalid phone number').required('Phone number is required'),
   password: yup.string().min(8, 'Password must be at least 8 characters').required('Password is required'),
   password2: yup.string().oneOf([yup.ref('password'), null], 'Passwords must match').required('Confirm password is required'),
 });
@@ -31,7 +31,7 @@ const SignUpPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/register/', {  // Note the trailing slash
+      const response = await fetch('/api/auth/register/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -44,13 +44,32 @@ const SignUpPage = () => {
           duration: 3000,
           position: 'top-center',
         });
-        // Redirect to OTP verification page with user_id
         router.push(`/verify-otp?user_id=${result.user_id}`);
       } else {
-        toast.error(result.error || 'Registration failed. Please try again.', {
-          duration: 4000,
-          position: 'top-center',
-        });
+        if (result.email) {
+          setError('email', {
+            type: 'manual',
+            message: result.email,
+          });
+          toast.error(result.email, {
+            duration: 4000,
+            position: 'top-center',
+          });
+        } else if (result.password) {
+          setError('password', {
+            type: 'manual',
+            message: result.password,
+          });
+          toast.error(result.password, {
+            duration: 4000,
+            position: 'top-center',
+          });
+        } else {
+          toast.error(result.error || 'Registration failed. Please try again.', {
+            duration: 4000,
+            position: 'top-center',
+          });
+        }
       }
     } catch (error) {
       toast.error('An error occurred. Please try again.', {
@@ -62,6 +81,7 @@ const SignUpPage = () => {
     }
   };
 
+  
   const inputClasses = `
     appearance-none relative block w-full px-3 py-3 border
     placeholder-gray-400 text-gray-200 rounded-lg focus:outline-none 
