@@ -19,21 +19,21 @@ from .utils import CTCLabelConverter
 import easyocr
 from rest_framework.permissions import IsAuthenticated
 
-# # Load Urdu glyphs
-# with open("backendapp/models/UrduGlyphs.txt", "r", encoding="utf-8") as file:
-#     urdu_content = file.read().replace('\n', '') + " "
+# Load Urdu glyphs
+with open("backendapp/models/UrduGlyphs.txt", "r", encoding="utf-8") as file:
+    urdu_content = file.read().replace('\n', '') + " "
 
-# # Model configuration for Urdu OCR
-# urdu_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# urdu_converter = CTCLabelConverter(urdu_content)
-# urdu_recognition_model = Model(num_class=len(urdu_converter.character), device=urdu_device)
-# urdu_recognition_model = urdu_recognition_model.to(urdu_device)
-# urdu_recognition_model.load_state_dict(torch.load("backendapp/models/best_norm_ED.pth", map_location=urdu_device))
-# urdu_recognition_model.eval()
-# urdu_detection_model = YOLO("backendapp/models/yolov8m_UrduDoc.pt")
+# Model configuration for Urdu OCR
+urdu_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+urdu_converter = CTCLabelConverter(urdu_content)
+urdu_recognition_model = Model(num_class=len(urdu_converter.character), device=urdu_device)
+urdu_recognition_model = urdu_recognition_model.to(urdu_device)
+urdu_recognition_model.load_state_dict(torch.load("backendapp/models/best_norm_ED.pth", map_location=urdu_device))
+urdu_recognition_model.eval()
+urdu_detection_model = YOLO("backendapp/models/yolov8m_UrduDoc.pt")
 
-# # Model for detecting 'chip' class
-# chip_detection_model = YOLO("backendapp/models/best.pt")
+# Model for detecting 'chip' class
+chip_detection_model = YOLO("backendapp/models/best.pt")
 
 
 class ExtractOCRView(APIView):
@@ -42,23 +42,23 @@ class ExtractOCRView(APIView):
     permission_classes = []  # Disable permission for simplicity
     
 
-    def post(self, request, format='jpg'):
+    def post(self, request):
         
-        # Load Urdu glyphs
-        with open("backendapp/models/UrduGlyphs.txt", "r", encoding="utf-8") as file:
-            urdu_content = file.read().replace('\n', '') + " "
+        # # Load Urdu glyphs
+        # with open("backendapp/models/UrduGlyphs.txt", "r", encoding="utf-8") as file:
+        #     urdu_content = file.read().replace('\n', '') + " "
 
-        # Model configuration for Urdu OCR
-        urdu_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        urdu_converter = CTCLabelConverter(urdu_content)
-        urdu_recognition_model = Model(num_class=len(urdu_converter.character), device=urdu_device)
-        urdu_recognition_model = urdu_recognition_model.to(urdu_device)
-        urdu_recognition_model.load_state_dict(torch.load("backendapp/models/best_norm_ED.pth", map_location=urdu_device))
-        urdu_recognition_model.eval()
-        urdu_detection_model = YOLO("backendapp/models/yolov8m_UrduDoc.pt")
+        # # Model configuration for Urdu OCR
+        # urdu_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # urdu_converter = CTCLabelConverter(urdu_content)
+        # urdu_recognition_model = Model(num_class=len(urdu_converter.character), device=urdu_device)
+        # urdu_recognition_model = urdu_recognition_model.to(urdu_device)
+        # urdu_recognition_model.load_state_dict(torch.load("backendapp/models/best_norm_ED.pth", map_location=urdu_device))
+        # urdu_recognition_model.eval()
+        # urdu_detection_model = YOLO("backendapp/models/yolov8m_UrduDoc.pt")
 
-        # Model for detecting 'chip' class
-        chip_detection_model = YOLO("backendapp/models/best.pt")
+        # # Model for detecting 'chip' class
+        # chip_detection_model = YOLO("backendapp/models/best.pt")
         
         
         file = request.FILES.get('cnic')
