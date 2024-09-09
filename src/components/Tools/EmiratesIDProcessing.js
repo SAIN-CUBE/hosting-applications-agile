@@ -124,6 +124,12 @@ export default function EmiratesIDProcessing() {
       }
       return name;
     };
+
+    // Function to remove duplicate image results
+    const uniqueImageResults = data.images_results ? 
+      data.images_results.filter((v, i, a) => 
+        a.findIndex(t => JSON.stringify(t.detected_data) === JSON.stringify(v.detected_data)) === i
+      ) : [];
   
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-6">
@@ -137,16 +143,21 @@ export default function EmiratesIDProcessing() {
           </button>
         </div>
         <div className="space-y-6">
-          {data.images_results.map((imageResult, index) => (
-            <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
-              <h3 className="text-lg font-semibold text-white mb-2">Image {index + 1}</h3>
-              <DataCard title="Detected Data" data={imageResult.detected_data} />
-            </div>
-          ))}
+          {uniqueImageResults.length > 0 ? (
+            uniqueImageResults.map((imageResult, index) => (
+              <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">Image {index + 1}</h3>
+                <DataCard title="Detected Data" data={imageResult.detected_data} />
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-300">No unique image results available.</p>
+          )}
         </div>
       </div>
     );
   };
+
   
   const handleFileSelection = () => {
     fileInputRef.current.click()
