@@ -278,7 +278,7 @@ from PIL import Image
 import fitz  # PyMuPDF
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from .logger.logger import logging
 import warnings
 warnings.filterwarnings("ignore")
@@ -557,7 +557,7 @@ def trade_certificate(img):
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesDataView(APIView):
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
         start_time = time.time()
