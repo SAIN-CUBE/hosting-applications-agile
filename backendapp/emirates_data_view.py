@@ -17,7 +17,13 @@ import fitz  # PyMuPDF
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import warnings
+import logging
+
 warnings.filterwarnings("ignore")
+
+# Set up logging
+logging.basicConfig(filename='error.log', level=logging.ERROR,
+                    format='%(asctime)s %(levelname)s %(message)s')
 
 # Load the YOLO backendapp/em_models from backendapp/em_models directory
 driving_model = YOLO("backendapp/em_models/driving_front_back.pt")
@@ -350,6 +356,7 @@ class EmiratesDataView(APIView):
             return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logging.error("Error in EmiratesDataView POST: %s", str(e))
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         finally:
             if os.path.exists(temp_file_path):
