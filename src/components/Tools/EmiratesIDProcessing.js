@@ -30,11 +30,12 @@ export default function EmiratesIDProcessing() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'image/*': [] },
+    accept: { 'image/*': [], 'application/pdf': [] },
     noClick: true,
     noKeyboard: true,
   })
 
+  
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000; // 1 second
   
@@ -235,14 +236,14 @@ export default function EmiratesIDProcessing() {
                   >
                     Select Files
                   </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    style={{ display: 'none' }}
-                    multiple
-                  />
+                    <input
+    ref={fileInputRef}
+    type="file"
+    accept="image/*,application/pdf"
+    onChange={handleFileChange}
+    style={{ display: 'none' }}
+    multiple
+  />
                 </div>
               </div>
               {files.length > 0 && (
@@ -387,4 +388,3 @@ export default function EmiratesIDProcessing() {
     </div>
   )
 }
-
