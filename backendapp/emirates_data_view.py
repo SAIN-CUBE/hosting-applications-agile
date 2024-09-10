@@ -365,7 +365,6 @@
 #             if os.path.exists(temp_file_path):
 #                 os.remove(temp_file_path)
 
-
 from django.conf import settings
 import cv2
 import easyocr
@@ -380,6 +379,7 @@ import time
 from datetime import datetime
 import json
 import os
+import re
 from PIL import Image
 import fitz  # PyMuPDF
 from django.views.decorators.csrf import csrf_exempt
@@ -387,6 +387,19 @@ from django.utils.decorators import method_decorator
 import warnings
 from rest_framework.permissions import AllowAny
 warnings.filterwarnings("ignore")
+
+# # Load the YOLO backendapp/em_models from backendapp/em_models directory
+# driving_model = YOLO("backendapp/em_models/driving_front_back.pt")
+# id_model = YOLO("backendapp/em_models/ID_front_back.pt")
+# vehicle_model = YOLO("backendapp/em_models/vehicle_front_back.pt")
+# pass_model = YOLO("backendapp/em_models/pass.pt")
+# trade_model = YOLO("backendapp/em_models/trade.pt")
+
+# # Load the OCR reader
+# reader = easyocr.Reader(['en'])
+# ar_en_reader = easyocr.Reader(['ar', 'en'])
+
+special_chars = r'[!@#$%^&*()_+=\[\]{};:\'",.<>?`~]'
 
 # Utility functions for processing
 def process_file(file_path: str, model_path: str = 'backendapp/em_models/classify.pt', cropped_dir: str = 'cropped_images', oriented_dir: str = 'oriented_images'):
@@ -486,6 +499,7 @@ def id(img):
             ID_results = settings.READER.readtext(crop_img)       
             if ID_results:
                 text = ID_results[0][1].strip()
+                text = re.sub(special_chars, '', text)
                 class_name = result.names[int(cls)]
                 if class_name in class_names:
                     key = class_names[class_name]
@@ -530,6 +544,7 @@ def driving(img):
             ID_results = settings.READER.readtext(crop_img)       
             if ID_results:
                 text = ID_results[0][1].strip()
+                text = re.sub(special_chars, '', text)
                 class_name = result.names[int(cls)]
                 if class_name in class_names:
                     key = class_names[class_name]
@@ -582,6 +597,7 @@ def vehicle(img):
             veh_results = settings.AR_EN_READER.readtext(crop_img)
             if veh_results:
                 text = veh_results[0][1].strip()
+                text = re.sub(special_chars, '', text)
                 class_name = result.names[int(cls)]
                 if class_name in class_names:
                     key = class_names[class_name]
@@ -608,6 +624,7 @@ def pass_certificate(img):
             ID_results = settings.READER.readtext(crop_img)       
             if ID_results:
                 text = ID_results[0][1].strip()
+                text = re.sub(special_chars, '', text)
                 class_name = result.names[int(cls)]
                 if class_name in class_names:
                     key = class_names[class_name]
@@ -642,6 +659,7 @@ def trade_certificate(img):
             ID_results = settings.READER.readtext(crop_img)       
             if ID_results:
                 text = ID_results[0][1].strip()
+                text = re.sub(special_chars, '', text)
                 class_name = result.names[int(cls)]
                 if class_name in class_names:
                     key = class_names[class_name]
