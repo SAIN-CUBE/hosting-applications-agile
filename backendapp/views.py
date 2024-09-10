@@ -27,7 +27,8 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
-from .logger.logger import logging
+import logging
+from rest_framework_simplejwt.exceptions import TokenError
 
 # logger = logging.getLogger(__name__)
 
@@ -48,21 +49,31 @@ def get_tokens_for_user(user):
 class LoginView(TokenObtainPairView):
     # serializer_class = CustomTokenObtainPairSerializer
     logging.info(f"Login user...")
-    permission_classes = [AllowAny]
+    permission_classes = []
+
     def post(self, request, format=None):
         serializer = UserLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.data.get('email')
-        password = serializer.data.get('password')
+        email = serializer.validated_data.get('email')
+        password = serializer.validated_data.get('password')
         user = authenticate(email=email, password=password)
-        logging.info(user)
-        if user is not None and user.is_active==True:
-            token = get_tokens_for_user(user)
-            logging.info("Login complete ")
-            return Response({'token':token, 'msg':'Login Success'}, status=status.HTTP_200_OK)
+        
+        if user is not None and user.is_active:
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+
+            logging.info("Login successful for user: %s", user.email)
+            return Response({
+                'token': {
+                    'access': access_token,
+                    'refresh': refresh_token
+                },
+                'msg': 'Login Success'
+            }, status=status.HTTP_200_OK)
         else:
-            logging.error("Login failed")
-            return Response({'errors':{'non_field_errors':['Email or Password is not Valid']}}, status=status.HTTP_404_NOT_FOUND)
+            logging.error("Login failed for email: %s", email)
+            return Response({'errors': {'non_field_errors': ['Email or Password is not Valid']}}, status=status.HTTP_404_NOT_FOUND)
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
@@ -193,51 +204,96 @@ class ResendOTPView(generics.CreateAPIView):
             return False
         
 
-class LogoutView(generics.GenericAPIView):
-    def post(self, request, *args, **kwargs):
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
         try:
-            refresh_token = request.data["refresh_token"]
+            refresh_token = request.data.get("refresh_token")
+            if not refresh_token:
+                return Response({"error": "Refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
             token = RefreshToken(refresh_token)
             token.blacklist()
-
-            return Response(status=status.HTTP_205_RESET_CONTENT)
+            
+            logging.info(f"User {request.user.email} logged out successfully")
+            return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+        except TokenError:
+            logging.warning(f"Invalid token provided for logout by user {request.user.email}")
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+            logging.exception(f"Error during logout for user {request.user.email}: {str(e)}")
+            return Response({"error": "An error occurred during logout"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 class SendPasswordResetEmailView(APIView):
     permission_classes = [AllowAny]
     def post(self, request, format=None):
         try:
             serializer = SendPasswordResetEmailSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            logging.info("Password reset email sent successfully for email: %s", request.data.get('email'))
-            return Response({'msg': 'Password Reset link sent. Please check your email.'}, status=status.HTTP_200_OK)
-        
-        except ValidationError as e:
-            logging.error(f"error in password reset email: {serializer.errors}")
-            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-        
+            if serializer.is_valid():
+                logging.info("Password reset email sent successfully for email: %s", request.data.get('email'))
+                return Response({
+                    'msg': 'Password Reset link sent. Please check your email.',
+                    'toast': {
+                        'type': 'success',
+                        'message': 'Password reset link sent to your email.'
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                error_msg = next(iter(serializer.errors.values()))[0]
+                logging.error(f"Error in password reset email: {error_msg}")
+                return Response({
+                    'error': error_msg,
+                    'toast': {
+                        'type': 'error',
+                        'message': error_msg
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logging.error("An unexpected error occurred while sending password reset email")
-            return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'error': 'An error occurred. Please try again later.',
+                'toast': {
+                    'type': 'error',
+                    'message': 'An error occurred. Please try again later.'
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserPasswordResetView(APIView):
     permission_classes = [AllowAny]
     def post(self, request, uid, token, format=None):
         try:
             serializer = UserPasswordResetSerializer(data=request.data, context={'id': uid, 'token': token})
-            serializer.is_valid(raise_exception=True)
-            logging.info("Password reset successful for user with UID: %s", uid)
-            return Response({'msg': 'Password Reset Successfully'}, status=status.HTTP_200_OK)
-
-        except ValidationError as e:
-            logging.error("Validation error for UID: %s, errors: %s", uid, serializer.errors)
-            return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
+            if serializer.is_valid():
+                logging.info("Password reset successful for user with UID: %s", uid)
+                return Response({
+                    'msg': 'Password Reset Successfully',
+                    'toast': {
+                        'type': 'success',
+                        'message': 'Password has been reset successfully.'
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                error_msg = next(iter(serializer.errors.values()))[0]
+                logging.error("Validation error for UID: %s, errors: %s", uid, error_msg)
+                return Response({
+                    'error': error_msg,
+                    'toast': {
+                        'type': 'error',
+                        'message': error_msg
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logging.exception("An unexpected error occurred during password reset for UID: %s", uid)
-            return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+            return Response({
+                'error': 'An error occurred. Please try again later.',
+                'toast': {
+                    'type': 'error',
+                    'message': 'An error occurred. Please try again later.'
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 class VisitorOverviewView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -277,7 +333,7 @@ class UserDashboardView(APIView):
     def get(self, request):
         try:
             user = request.user
-            logging.info("Dashboard data requested by user: %s", user.username)
+            logging.info("Dashboard data requested by user: %s", user.email)
 
             credit = Credit.objects.filter(user=user).first()
             credit_data = CreditSerializer(credit).data if credit else None
@@ -289,13 +345,14 @@ class UserDashboardView(APIView):
                 'credits': credit_data
             }
 
-            logging.info("Dashboard data successfully retrieved for user: %s", user.username)
+            logging.info("Dashboard data successfully retrieved for user: %s", user.email)
             return Response(dashboard_data, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logging.exception("An error occurred while fetching dashboard data for user: %s", request.user.username)
+            logging.exception("An error occurred while fetching dashboard data for user: %s", request.user.email)
             return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+        
+
 class UserDetailsView(APIView):
     permission_classes = [IsAuthenticated]
 

@@ -251,7 +251,7 @@ import re
 import easyocr
 from .read import text_recognizer
 from rest_framework.permissions import AllowAny
-from .logger.logger import logging
+import logging
 
 
 class ExtractOCRView(APIView):

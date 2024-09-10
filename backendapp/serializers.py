@@ -70,68 +70,82 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
   
     
 class SendPasswordResetEmailSerializer(serializers.Serializer):
-  email = serializers.EmailField(max_length=255)
-  class Meta:
-    fields = ['email']
-
-  def validate(self, attrs):
-    email = attrs.get('email')
-    # print(email)
-    if User.objects.filter(email=email).exists():
-      user = User.objects.get(email = email)
-      if user.is_active:
-        uid = urlsafe_base64_encode(force_bytes(user.id))
-        print('Encoded UID', uid)
-        token = PasswordResetTokenGenerator().make_token(user)
-        print('Password Reset Token', token)
-        link = 'http://localhost:3000/api/user/reset/'+uid+'/'+token
-        print('Password Reset Link', link)
-        # Send EMail
-        body = 'Click Following Link to Reset Your Password '+link
-        print("sending email")
-        email_send = EmailMessage(
-          subject='Reset Your Password',
-          body=body,
-          from_email=settings.EMAIL_HOST_USER,
-          to=[email]
-          )
-        email_send.send(fail_silently=False)
-        print("send succesfully")
-
-        return attrs
-      else:
-        raise serializers.ValidationError('Account doesn\'t exist with this email.')
-    else:
-      raise serializers.ValidationError('You are not a Registered User')
-
+    email = serializers.EmailField(max_length=255)
+    class Meta:
+        fields = ['email']
+    def validate(self, attrs):
+        email = attrs.get('email')
+        if User.objects.filter(email=email).exists():
+            user = User.objects.get(email=email)
+            if user.is_active:
+                uid = urlsafe_base64_encode(force_bytes(user.id))
+                token = PasswordResetTokenGenerator().make_token(user)
+                link = f'http://localhost:3000/reset-password/{uid}/{token}'
+               
+                # Send email using EmailJS
+                url = "https://api.emailjs.com/api/v1.0/email/send"
+                data = {
+                    "user_id": settings.EMAILJS_USER_ID,
+                    "service_id": settings.EMAILJS_SERVICE_ID,
+                    "template_id": settings.EMAILJS_TEMPLATE_ID_RESET,
+                    "template_params": {
+                        "to_email": email,
+                        "to_name": user.first_name,
+                        "reset_link": link,
+                    },
+                    "accessToken": settings.EMAILJS_API_KEY    
+                }
+               
+                headers = {"Content-Type": "application/json"}
+                try:
+                    response = requests.post(url, json=data, headers=headers)
+                    if response.status_code == 200:
+                        return attrs
+                    else:
+                        raise serializers.ValidationError('Failed to send password reset email')
+                except Exception as e:
+                    raise serializers.ValidationError(f'Error sending email: {str(e)}')
+            else:
+                raise serializers.ValidationError('Account is not active.')
+        else:
+            raise serializers.ValidationError('Email does not exist in our records.')
 
 class UserPasswordResetSerializer(serializers.Serializer):
-  password = serializers.CharField(max_length=255, style={'input_type':'password'}, write_only=True)
-  password2 = serializers.CharField(max_length=255, style={'input_type':'password'}, write_only=True)
-  class Meta:
-    fields = ['password', 'password2']
-
-  def validate(self, attrs):
-    try:
-      password = attrs.get('password')
-      password2 = attrs.get('password2')
-      uid = self.context.get('id')
-      print(uid)
-      token = self.context.get('token')
-      print(token)
-      if password != password2:
-        raise serializers.ValidationError("Password and Confirm Password doesn't match")
-      id = smart_str(urlsafe_base64_decode(uid))
-      user = User.objects.get(id=id)
-      if not PasswordResetTokenGenerator().check_token(user, token):
-        raise serializers.ValidationError('Token is not Valid or Expired')
-      user.set_password(password)
-      user.save()
-      return attrs
-    except DjangoUnicodeDecodeError as identifier:
-      PasswordResetTokenGenerator().check_token(user, token)
-      raise serializers.ValidationError('Token is not Valid or Expired')
-
+    password = serializers.CharField(max_length=255, style={'input_type':'password'}, write_only=True)
+    password2 = serializers.CharField(max_length=255, style={'input_type':'password'}, write_only=True)
+    class Meta:
+        fields = ['password', 'password2']
+    def validate(self, attrs):
+        try:
+            password = attrs.get('password')
+            password2 = attrs.get('password2')
+            uid = self.context.get('id')
+            token = self.context.get('token')
+            if password != password2:
+                raise serializers.ValidationError("Password and Confirm Password don't match")
+            id = smart_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(id=id)
+            if not PasswordResetTokenGenerator().check_token(user, token):
+                raise serializers.ValidationError('Token is not Valid or Expired')
+            
+            # Check if the new password is the same as the old password
+            if user.check_password(password):
+                raise serializers.ValidationError("New password cannot be the same as the old password")
+            
+            # Validate password strength
+            try:
+                validate_password(password, user)
+            except DjangoValidationError as e:
+                raise serializers.ValidationError(list(e.messages))
+            
+            user.set_password(password)
+            user.save()
+            return attrs
+        except DjangoUnicodeDecodeError as identifier:
+            PasswordResetTokenGenerator().check_token(user, token)
+            raise serializers.ValidationError('Token is not Valid or Expired')
+        
+        
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
