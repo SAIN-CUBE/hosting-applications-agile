@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useCallback, useRef } from 'react'
-import { DocumentTextIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { DocumentTextIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
@@ -12,12 +12,12 @@ export default function MultiCNICExtraction() {
   const [results, setResults] = useState([])
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('tool')
+  const [viewMode, setViewMode] = useState('text')
   const videoRef = useRef(null)
   const fileInputRef = useRef(null)
 
   const onDrop = useCallback((acceptedFiles) => {
     if (processing) {
-      // Cancel ongoing processing
       axios.CancelToken.source().cancel('Operation canceled by the user.')
       setProcessing(false)
     }
@@ -55,20 +55,19 @@ export default function MultiCNICExtraction() {
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
           },
           cancelToken: cancelTokenSource.token,
-          timeout: 30000, // 30 seconds timeout
+          timeout: 30000,
         });
 
         newResults.push({ fileName: file.name, data: response.data });
       }
       setResults(newResults);
+      setFiles([]); // Clear files after processing
     } catch (error) {
       if (axios.isCancel(error)) {
         console.log('Request canceled:', error.message);
       } else if (error.code === 'ECONNABORTED') {
-        console.error('Request timed out:', error);
         setError('Request timed out. Please try again.');
       } else {
-        console.error('Error extracting CNIC data:', error);
         setError(`Failed to extract CNIC data: ${error.message}`);
       }
     } finally {
@@ -84,7 +83,6 @@ export default function MultiCNICExtraction() {
     const selectedFiles = Array.from(e.target.files)
     if (selectedFiles.length > 0) {
       if (processing) {
-        // Cancel ongoing processing
         axios.CancelToken.source().cancel('Operation canceled by the user.')
         setProcessing(false)
       }
@@ -122,9 +120,10 @@ export default function MultiCNICExtraction() {
     };
   
     const dataToDisplay = data.data || {};
-    const allDataString = Object.entries(dataToDisplay)
+    const textData = Object.entries(dataToDisplay)
       .map(([key, value]) => `${formatKey(key)}: ${stringifyValue(value)}`)
       .join('\n');
+    const jsonData = JSON.stringify(data, null, 2);
   
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden mb-6">
@@ -132,7 +131,7 @@ export default function MultiCNICExtraction() {
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-white">{fileName}</h3>
             <button
-              onClick={() => copyToClipboard(allDataString)}
+              onClick={() => copyToClipboard(viewMode === 'text' ? textData : jsonData)}
               className="text-gray-400 hover:text-gray-200 transition-colors"
             >
               {copied ? <CheckIcon className="h-6 w-6" /> : <ClipboardIcon className="h-6 w-6" />}
@@ -140,7 +139,7 @@ export default function MultiCNICExtraction() {
           </div>
           <div className="bg-gray-700 p-5 rounded">
             <div className="text-base leading-relaxed text-gray-200 whitespace-pre-wrap break-words">
-              {allDataString}
+              {viewMode === 'text' ? textData : jsonData}
             </div>
           </div>
         </div>
@@ -148,6 +147,30 @@ export default function MultiCNICExtraction() {
     );
   };
   
+  const ViewToggle = () => (
+    <div className="flex justify-end mb-4">
+      <div className="bg-gray-700 rounded-lg p-1 flex">
+        <button
+          onClick={() => setViewMode('text')}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            viewMode === 'text' ? 'bg-gray-900 text-white' : 'text-gray-300 hover:text-white'
+          }`}
+        >
+          <ListBulletIcon className="h-5 w-5 inline-block mr-1" />
+          Text
+        </button>
+        <button
+          onClick={() => setViewMode('json')}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            viewMode === 'json' ? 'bg-gray-900 text-white' : 'text-gray-300 hover:text-white'
+          }`}
+        >
+          <CodeBracketIcon className="h-5 w-5 inline-block mr-1" />
+          JSON
+        </button>
+      </div>
+    </div>
+  );
   
   const TabContent = () => {
     if (activeTab === 'tool') {
@@ -216,17 +239,17 @@ export default function MultiCNICExtraction() {
             </motion.div>
           )}
 
-
-{results.length > 0 && (
+          {results.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               className="mt-12"
             >
+              <ViewToggle />
               <div className="space-y-6">
                 {results.map((result, index) => (
-                  <ResultCard key={index} fileName={result.fileName} data={result.data} index={index} />
+                  <ResultCard key={index} fileName={result.fileName} data={result.data} />
                 ))}
               </div>
             </motion.div>

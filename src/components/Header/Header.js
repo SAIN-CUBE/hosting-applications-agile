@@ -56,7 +56,7 @@ const Header = () => {
             </div>
             <div className="flex items-center space-x-[30px]">
               <Link href="/login" className={`${commonLinkClasses} flex items-center space-x-1.5`}>
-                <span>Register Now</span>
+                <span>Login / Signup</span>
                 <svg width="14" height="18" viewBox="0 0 14 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path className="group-hover:stroke-purple transition-all duration-300" d="M8.84289 11.625H8.84961M5.09961 11.625H5.10633" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   <path className="group-hover:stroke-purple transition-all duration-300" d="M1.17547 14.1336C1.34413 15.3862 2.38171 16.3676 3.64435 16.4257C4.70682 16.4745 5.78609 16.5 6.97461 16.5C8.16313 16.5 9.24241 16.4745 10.3049 16.4257C11.5675 16.3676 12.6051 15.3862 12.7738 14.1336C12.8838 13.316 12.9746 12.4782 12.9746 11.625C12.9746 10.7718 12.8838 9.93399 12.7738 9.11644C12.6051 7.86377 11.5675 6.88237 10.3049 6.82432C9.24241 6.77548 8.16313 6.75 6.97461 6.75C5.78609 6.75 4.70681 6.77548 3.64435 6.82432C2.38171 6.88237 1.34413 7.86377 1.17547 9.11644C1.06539 9.93399 0.974609 10.7718 0.974609 11.625C0.974609 12.4782 1.06539 13.316 1.17547 14.1336Z" stroke="currentColor" strokeWidth="1.5" />
@@ -114,7 +114,8 @@ const Header = () => {
               </ul>
               <div className="flex flex-col gap-5">
                 <Link href="/login" className="group flex space-x-1.5 items-center text-white hover:text-purple w-fit" onClick={toggleMenu}>
-                  <span className="font-semibold">Register Now</span>
+                  <span className="font-semibold">Login / Signup
+                  </span>
                   <svg width="14" height="18" viewBox="0 0 14 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path className="group-hover:stroke-purple transition-all duration-300" d="M8.84289 11.625H8.84961M5.09961 11.625H5.10633" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     <path className="group-hover:stroke-purple transition-all duration-300" d="M1.17547 14.1336C1.34413 15.3862 2.38171 16.3676 3.64435 16.4257C4.70682 16.4745 5.78609 16.5 6.97461 16.5C8.16313 16.5 9.24241 16.4745 10.3049 16.4257C11.5675 16.3676 12.6051 15.3862 12.7738 14.1336C12.8838 13.316 12.9746 12.4782 12.9746 11.625C12.9746 10.7718 12.8838 9.93399 12.7738 9.11644C12.6051 7.86377 11.5675 6.88237 10.3049 6.82432C9.24241 6.77548 8.16313 6.75 6.97461 6.75C5.78609 6.75 4.70681 6.77548 3.64435 6.82432C2.38171 6.88237 1.34413 7.86377 1.17547 9.11644C1.06539 9.93399 0.974609 10.7718 0.974609 11.625C0.974609 12.4782 1.06539 13.316 1.17547 14.1336Z" stroke="currentColor" strokeWidth="1.5" />

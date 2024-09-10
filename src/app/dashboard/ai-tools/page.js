@@ -5,6 +5,7 @@ import Layout from '@/app/dashboard/ai-tools/layout'
 import { CreditCardIcon, DocumentTextIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import AppBar from '@/components/Dashboard/AppBar'
 import { useRouter } from 'next/navigation'
+import ProtectedDashboard from '@/components/Dashboard/ProtectedDashboard'
 
 const tools = [
   {
@@ -41,6 +42,7 @@ export default function AITools() {
 
   return (
     <Layout title="AI Tools | Tool Box">
+      <ProtectedDashboard>
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
         <AppBar />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -57,6 +59,7 @@ export default function AITools() {
           </div>
         </main>
       </div>
+      </ProtectedDashboard>
     </Layout>
   )
 }

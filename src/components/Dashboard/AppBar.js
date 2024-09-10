@@ -51,6 +51,31 @@ const AppBar = () => {
     </div>
   );
 
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify({
+          refresh_token: localStorage.getItem('refreshToken'),
+        }),
+      });
+  
+      if (response.ok) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        router.push('/login');
+      } else {
+        console.error('Logout failed');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <nav className="bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -63,7 +88,7 @@ const AppBar = () => {
           </div>
 
           {/* Credit Information, Notification and Profile Section */}
-          <div className="hidden md:flex md:items-center space-x-4">
+          <div className="hidden sm:flex sm:items-center space-x-4">
             <CreditInfo />
 
             <button className="p-1 rounded-full text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
@@ -92,16 +117,16 @@ const AppBar = () => {
                   <Link href="/settings" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
                     Settings
                   </Link>
-                  <Link href="/logout" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
-                    Sign out
-                  </Link>
+                  <button onClick={handleLogout} className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                    Log out
+                  </button>
                 </div>
               )}
             </div>
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="flex md:hidden">
+          <div className="flex sm:hidden md:hidden lg:hidden">
             <button
               type="button"
               className="bg-gray-800 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
@@ -124,7 +149,7 @@ const AppBar = () => {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden" id="mobile-menu">
+        <div className="sm:hidden" id="mobile-menu">
           <div className="pt-4 pb-3 border-t border-gray-700">
             <div className="flex items-center px-8">
               <div className="flex-shrink-0">
@@ -145,9 +170,9 @@ const AppBar = () => {
               <Link href="/settings" className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700">
                 Settings
               </Link>
-              <Link href="/logout" className="block px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700">
-                Sign out
-              </Link>
+              <div onClick={handleLogout} className="mx-auto px-3 py-2 rounded-md text-base font-medium text-gray-400 hover:text-white hover:bg-gray-700">
+                Log out
+              </div>              
             </div>
           </div>
         </div>

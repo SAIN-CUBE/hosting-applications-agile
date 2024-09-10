@@ -9,6 +9,7 @@ import AppBar from '@/components/Dashboard/AppBar'
 import CNICExtraction from '@/components/Tools/CNICExtraction'
 import EmiratesIDProcessing from '@/components/Tools/EmiratesIDProcessing'
 import RAGChat from '@/components/Tools/RAGChat'
+import ProtectedDashboard from '@/components/Dashboard/ProtectedDashboard'
 
 const tools = {
   cnic: {
@@ -49,6 +50,7 @@ export default function ToolPage() {
 
   return (
     <Layout title={`${tool.name} | AI Tools`}>
+      <ProtectedDashboard>
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
         <AppBar />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -72,6 +74,7 @@ export default function ToolPage() {
             </div>
         </main>
       </div>
+      </ProtectedDashboard> 
     </Layout>
   )
 }

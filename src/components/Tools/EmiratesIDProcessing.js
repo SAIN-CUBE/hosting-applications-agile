@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon , ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
@@ -10,6 +10,7 @@ export default function EmiratesIDProcessing() {
   const [results, setResults] = useState([])
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('tool')
+  const [viewMode, setViewMode] = useState('normal')
   const videoRef = useRef(null)
   const fileInputRef = useRef(null)
   const abortControllerRef = useRef(null)
@@ -75,6 +76,8 @@ export default function EmiratesIDProcessing() {
         }
       }
       setResults(newResults);
+      // Clear the files after successful processing
+      setFiles([]);
     } catch (error) {
       setError(error.response?.data?.detail || 'An error occurred while processing the files.');
     } finally {
@@ -83,30 +86,27 @@ export default function EmiratesIDProcessing() {
   };
 
 
-  const DataCard = ({ title, data }) => (
-    <div className="bg-gray-700 rounded-lg p-4 mb-4">
-      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-      {Object.entries(data).map(([key, value]) => (
-        <p key={key} className="text-gray-300">
-          <span className="font-medium">{key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span> {value || 'N/A'}
-        </p>
-      ))}
-    </div>
-  );
-  
   const ResultCard = ({ data, fileName }) => {
     const [copied, setCopied] = useState(false);
   
     const formatData = (obj) => {
-      let result = '';
-      for (const [key, value] of Object.entries(obj)) {
-        if (typeof value === 'object' && value !== null) {
-          result += `${key}:\n${formatData(value)}`;
-        } else {
-          result += `${key}: ${value}\n`;
-        }
+      if (viewMode === 'json') {
+        return JSON.stringify(obj, null, 2);
       }
-      return result;
+      
+      let result = '';
+      if (obj.images_results && obj.images_results.length > 0) {
+        obj.images_results.forEach((image, index) => {
+          result += `Image ${index + 1}\n`;
+          for (const [key, value] of Object.entries(image.detected_data)) {
+            result += `${key}: ${value}\n`;
+          }
+          result += '\n';
+        });
+      } else {
+        result = 'No image results available.\n';
+      }
+      return result.trim();
     };
   
     const formattedData = formatData(data);
@@ -125,12 +125,6 @@ export default function EmiratesIDProcessing() {
       return name;
     };
 
-    // Function to remove duplicate image results
-    const uniqueImageResults = data.images_results ? 
-      data.images_results.filter((v, i, a) => 
-        a.findIndex(t => JSON.stringify(t.detected_data) === JSON.stringify(v.detected_data)) === i
-      ) : [];
-  
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-6">
         <div className="flex justify-between items-center mb-4">
@@ -143,15 +137,27 @@ export default function EmiratesIDProcessing() {
           </button>
         </div>
         <div className="space-y-6">
-          {uniqueImageResults.length > 0 ? (
-            uniqueImageResults.map((imageResult, index) => (
-              <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">Image {index + 1}</h3>
-                <DataCard title="Detected Data" data={imageResult.detected_data} />
-              </div>
-            ))
+          {viewMode === 'json' ? (
+            <pre className="bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm text-gray-300">
+              {formattedData}
+            </pre>
           ) : (
-            <p className="text-gray-300">No unique image results available.</p>
+            data.images_results && data.images_results.length > 0 ? (
+              data.images_results.map((imageResult, index) => (
+                <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
+                  <h3 className="text-lg font-semibold text-white mb-2">Image {index + 1}</h3>
+                  <div className="text-gray-300">
+                    {Object.entries(imageResult.detected_data).map(([key, value]) => (
+                      <p key={key} className="mb-1">
+                        <span className="font-medium">{key}:</span> {value || 'N/A'}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-300">No image results available.</p>
+            )
           )}
         </div>
       </div>
@@ -185,18 +191,43 @@ export default function EmiratesIDProcessing() {
 
   const totalCredits = files.length * 8
 
+  const ViewToggle = () => (
+    <div className="flex justify-end mb-4">
+      <div className="bg-gray-700 rounded-lg p-1 flex">
+        <button
+          onClick={() => setViewMode('normal')}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            viewMode === 'normal' ? 'bg-gray-900 text-white' : 'text-gray-300 hover:text-white'
+          }`}
+        >
+          <ListBulletIcon className="h-5 w-5 inline-block mr-1" />
+          Normal
+        </button>
+        <button
+          onClick={() => setViewMode('json')}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            viewMode === 'json' ? 'bg-gray-900 text-white' : 'text-gray-300 hover:text-white'
+          }`}
+        >
+          <CodeBracketIcon className="h-5 w-5 inline-block mr-1" />
+          JSON
+        </button>
+      </div>
+    </div>
+  );
+
   const TabContent = () => {
     if (activeTab === 'tool') {
       return (
         <div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-200">Upload Emirates IDs</label>
+              <label className="block text-sm font-medium text-gray-200">Upload UAE Documents</label>
               <div {...getRootProps()} className="cursor-pointer">
                 <input {...getInputProps()} />
                 <div className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${isDragActive ? 'border-green-400 bg-green-400/10' : 'border-gray-600 hover:border-gray-500'}`}>
                   <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-gray-300">Drag & drop Emirates ID images here</p>
+                  <p className="text-gray-300">Drag & drop UAE Document images here</p>
                   <button
                     type="button"
                     onClick={handleFileSelection}
@@ -236,7 +267,7 @@ export default function EmiratesIDProcessing() {
               className="w-full bg-gradient-to-r from-green-500 to-teal-500 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:from-green-600 hover:to-teal-600 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-102 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               disabled={files.length === 0 || processing}
             >
-              {processing ? 'Processing...' : `Extract Emirates ID Data (${totalCredits} credits)`}
+              {processing ? 'Processing...' : `Extract UAE Document Data (${totalCredits} credits)`}
             </button>
           </form>
           
@@ -252,13 +283,14 @@ export default function EmiratesIDProcessing() {
             </motion.div>
           )}
 
-{results.length > 0 && (
+          {results.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               className="mt-12"
             >
+              <ViewToggle/>
               <div className="space-y-6">
                 {results.map((result, index) => (
                   <ResultCard key={index} fileName={result.fileName} data={result.data} index={index} />
@@ -274,11 +306,11 @@ export default function EmiratesIDProcessing() {
           <div>
             <h2 className="text-2xl font-semibold mb-4">About This Tool</h2>
             <p className="text-gray-300 mb-4">
-              Our Emirates ID Processing tool uses advanced AI to extract and verify data from multiple Emirates ID cards quickly and accurately. Perfect for businesses needing to validate customer information or for individuals wanting to digitize their ID details.
+              Our UAE Document Processing tool uses advanced AI to extract and verify data from multiple UAE documents quickly and accurately. Perfect for businesses needing to validate customer information or for individuals wanting to digitize their document details.
             </p>
             <ul className="list-disc list-inside text-gray-300 space-y-2">
-              <li>Fast and accurate data extraction for multiple Emirates IDs</li>
-              <li>Supports all Emirates ID formats</li>
+              <li>Fast and accurate data extraction for multiple UAE documents</li>
+              <li>Supports all UAE document formats</li>
               <li>Secure and private processing</li>
               <li>Results in seconds</li>
             </ul>
@@ -306,15 +338,14 @@ export default function EmiratesIDProcessing() {
       )
     }
   }
-
   return (
     <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl p-8 shadow-2xl max-w-4xl mx-auto">
       <div className="flex flex-col md:flex-row items-center justify-between mb-10 space-y-4 md:space-y-0">
         <div className="flex items-center">
           <CreditCardIcon className="h-12 w-12 mr-4 text-green-400" />
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-400 to-teal-400">Emirates ID Processing</h1>
+          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-400 to-teal-400">UAE Document Processing</h1>
         </div>
-        <p className="text-green-400 font-semibold bg-green-400/10 px-4 py-2 rounded-full">8 credits per Emirates ID</p>
+        <p className="text-green-400 font-semibold bg-green-400/10 px-4 py-2 rounded-full">8 credits per UAE Document</p>
       </div>
 
       <div className="mb-8">
@@ -356,3 +387,4 @@ export default function EmiratesIDProcessing() {
     </div>
   )
 }
+

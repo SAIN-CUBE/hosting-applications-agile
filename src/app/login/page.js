@@ -65,8 +65,9 @@ const LoginPage = () => {
       const result = await response.json();
 
       if (response.ok) {
-        // Store the token in localStorage or a secure cookie
-        localStorage.setItem('token', result.token.access);
+        // Store both access and refresh tokens
+        localStorage.setItem('accessToken', result.token.access);
+        localStorage.setItem('refreshToken', result.token.refresh);
         
         toast.success('Login successful! Redirecting...', {
           duration: 3000,
@@ -80,6 +81,7 @@ const LoginPage = () => {
         });
       }
     } catch (error) {
+      console.error('Login error:', error);
       toast.error('An error occurred. Please try again.', {
         duration: 4000,
         position: 'top-center',

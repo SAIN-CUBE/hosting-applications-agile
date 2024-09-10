@@ -3,9 +3,6 @@ import { useState , useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Autoplay, Pagination, Navigation } from 'swiper/modules';
-
 // Import Swiper styles
 import 'swiper/css';
 import 'swiper/css/autoplay';

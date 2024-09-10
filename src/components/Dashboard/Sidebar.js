@@ -136,6 +136,31 @@ const Sidebar = () => {
     router.prefetch('/login'); // Prefetch login page for logout action
   }, [router, sidebarItems]);
 
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+        body: JSON.stringify({
+          refresh_token: localStorage.getItem('refreshToken'),
+        }),
+      });
+  
+      if (response.ok) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        router.push('/login');
+      } else {
+        console.error('Logout failed');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+  
   return (
     <aside 
       ref={sidebarRef}
@@ -174,15 +199,13 @@ const Sidebar = () => {
         ))}
       </nav>
       <div className={`px-4 py-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
-        <Link href="/login" passHref>
-          <button className={`${isCollapsed ? 'p-1.5' : 'w-full px-3 py-1.5'} text-xs font-medium text-gray-300 bg-gray-800 rounded-lg hover:bg-gray-700 focus:outline-none transition-colors duration-200`}>
+          <button onClick={handleLogout} className={`${isCollapsed ? 'p-1.5' : 'w-full px-3 py-1.5'} text-xs font-medium text-gray-300 bg-gray-800 rounded-lg hover:bg-gray-700 focus:outline-none transition-colors duration-200`}>
             {isCollapsed ? <FiLogOut className="w-5 h-5" /> : (
               <span className={`transition-opacity duration-300 ${textVisible ? 'opacity-100' : 'opacity-0'}`}>
                 Logout
               </span>
             )}
           </button>
-        </Link>
       </div>
     </aside>
   );
