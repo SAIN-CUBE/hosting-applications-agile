@@ -39,37 +39,43 @@ export default function EmiratesIDProcessing() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (files.length === 0) return;
-  
+    
     setProcessing(true);
     setError(null);
     setResults([]);
     
-    const cancelTokenSource = axios.CancelToken.source();
-  
+    const controller = new AbortController(); // Create new AbortController
+    abortControllerRef.current = controller; // Store controller in a ref for later cancellation
+    
     try {
       const newResults = [];
       for (const file of files) {
         const formData = new FormData();
-        formData.append('file', file);
-  
+        formData.append('file', file); // Assuming the field name is 'file'
+        
         const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          cancelToken: cancelTokenSource.token,
-          timeout: 30000,  // 30 seconds timeout
+          signal: controller.signal, // Connect AbortController signal to Axios
+          timeout: 600000, // 10-minute timeout in milliseconds
         });
         newResults.push({ fileName: file.name, data: response.data });
       }
       setResults(newResults);
-      setFiles([]); // Clear the files after successful processing
+      setFiles([]); // Clear files after successful processing
     } catch (error) {
-      setError(error.response?.data?.detail || 'An error occurred while processing the files.');
+      if (error.name === 'AbortError') {
+        console.log('Request aborted');
+      } else if (error.code === 'ECONNABORTED') {
+        setError('Request timed out. Please try again.');
+      } else {
+        setError(error.response?.data?.detail || 'An error occurred while processing the files.');
+      }
     } finally {
       setProcessing(false);
     }
-  };
-
+  };  
 
   const ResultCard = ({ data, fileName }) => {
     const [copied, setCopied] = useState(false);

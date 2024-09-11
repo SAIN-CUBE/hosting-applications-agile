@@ -18,7 +18,7 @@ export default function MultiCNICExtraction() {
 
   const onDrop = useCallback((acceptedFiles) => {
     if (processing) {
-      axios.CancelToken.source().cancel('Operation canceled by the user.')
+      // Abort any ongoing request
       setProcessing(false)
     }
     setFiles(prevFiles => [...prevFiles, ...acceptedFiles])
@@ -36,35 +36,35 @@ export default function MultiCNICExtraction() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (files.length === 0) return;
-
+  
     setProcessing(true);
     setError(null);
     setResults([]);
     
-    const cancelTokenSource = axios.CancelToken.source();
-
+    const controller = new AbortController(); // Using AbortController
+  
     try {
       const newResults = [];
       for (const file of files) {
         const formData = new FormData();
         formData.append('cnic', file);
-
+  
         const response = await axios.post('/api/tools/use/cnic-data-extraction/', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${localStorage.getItem('access_token')}`
           },
-          cancelToken: cancelTokenSource.token,
-          timeout: 30000,
+          signal: controller.signal, // Connect AbortController to Axios request
+          timeout: 600000, // 10-minute timeout in milliseconds
         });
-
+  
         newResults.push({ fileName: file.name, data: response.data });
       }
       setResults(newResults);
       setFiles([]); // Clear files after processing
     } catch (error) {
-      if (axios.isCancel(error)) {
-        console.log('Request canceled:', error.message);
+      if (error.name === 'AbortError') {
+        console.log('Request aborted');
       } else if (error.code === 'ECONNABORTED') {
         setError('Request timed out. Please try again.');
       } else {
@@ -73,6 +73,9 @@ export default function MultiCNICExtraction() {
     } finally {
       setProcessing(false);
     }
+  
+    // Function to abort the request
+    return () => controller.abort(); // Aborting the request when needed
   };
 
   const handleFileSelection = () => {
@@ -83,7 +86,7 @@ export default function MultiCNICExtraction() {
     const selectedFiles = Array.from(e.target.files)
     if (selectedFiles.length > 0) {
       if (processing) {
-        axios.CancelToken.source().cancel('Operation canceled by the user.')
+        // Abort any ongoing request
         setProcessing(false)
       }
       setFiles(prevFiles => [...prevFiles, ...selectedFiles])
