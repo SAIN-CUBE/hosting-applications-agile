@@ -1,3 +1,4 @@
+"use client";
 import { useState, useCallback, useRef } from 'react'
 import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import { useDropzone } from 'react-dropzone'
@@ -35,10 +36,6 @@ export default function EmiratesIDProcessing() {
     noKeyboard: true,
   })
 
-  
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 1000; // 1 second
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (files.length === 0) return;
@@ -55,30 +52,17 @@ export default function EmiratesIDProcessing() {
         const formData = new FormData();
         formData.append('file', file);
   
-        let retries = 0;
-        while (retries < MAX_RETRIES) {
-          try {
-            const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
-              headers: {
-                'Content-Type': 'multipart/form-data',
-              },
-              cancelToken: cancelTokenSource.token,
-              timeout: 30000,  // 30 seconds timeout
-            });
-            newResults.push({ fileName: file.name, data: response.data });
-            break; // Successful, exit retry loop
-          } catch (error) {
-            if (axios.isCancel(error) || error.code === 'ECONNABORTED' || retries === MAX_RETRIES - 1) {
-              throw error; // Rethrow if canceled, timed out, or max retries reached
-            }
-            retries++;
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          }
-        }
+        const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          cancelToken: cancelTokenSource.token,
+          timeout: 30000,  // 30 seconds timeout
+        });
+        newResults.push({ fileName: file.name, data: response.data });
       }
       setResults(newResults);
-      // Clear the files after successful processing
-      setFiles([]);
+      setFiles([]); // Clear the files after successful processing
     } catch (error) {
       setError(error.response?.data?.detail || 'An error occurred while processing the files.');
     } finally {
@@ -237,13 +221,13 @@ export default function EmiratesIDProcessing() {
                     Select Files
                   </button>
                     <input
-    ref={fileInputRef}
-    type="file"
-    accept="image/*,application/pdf"
-    onChange={handleFileChange}
-    style={{ display: 'none' }}
-    multiple
-  />
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                    multiple
+                  />
                 </div>
               </div>
               {files.length > 0 && (
