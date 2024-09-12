@@ -39,28 +39,31 @@ export default function EmiratesIDProcessing() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (files.length === 0) return;
-    
+  
     setProcessing(true);
     setError(null);
     setResults([]);
-    
-    const controller = new AbortController(); // Create new AbortController
-    abortControllerRef.current = controller; // Store controller in a ref for later cancellation
-    
+  
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+  
     try {
       const newResults = [];
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append('file', file); // Assuming the field name is 'file'
-        
-        const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          signal: controller.signal, // Connect AbortController signal to Axios
-          timeout: 600000, // 10-minute timeout in milliseconds
+      const batchSize = 5; // Upload 5 files at a time
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+        const uploadPromises = batch.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            signal: controller.signal,
+            timeout: 600000,
+          });
+          return { fileName: file.name, data: response.data };
         });
-        newResults.push({ fileName: file.name, data: response.data });
+        const batchResults = await Promise.all(uploadPromises);
+        newResults.push(...batchResults);
       }
       setResults(newResults);
       setFiles([]); // Clear files after successful processing
