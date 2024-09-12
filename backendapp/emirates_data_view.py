@@ -367,7 +367,8 @@
 
 from django.conf import settings
 import cv2
-import base64, tempfile
+import base64
+import tempfile
 import numpy as np
 from ultralytics import YOLO
 from rest_framework.views import APIView
@@ -379,7 +380,7 @@ import time
 from datetime import datetime
 import json
 import os
-import re
+import re, shutil
 from PIL import Image
 import fitz  # PyMuPDF
 from django.views.decorators.csrf import csrf_exempt
@@ -676,65 +677,83 @@ class EmiratesDataView(APIView):
     def post(self, request, *args, **kwargs):
         start_time = time.time()
         try:
-            # Retrieve uploaded file
-            uploaded_file = request.FILES['file']
-            temp_file_path = f"temp_{uploaded_file.name}"
-            with open(temp_file_path, "wb") as buffer:
-                buffer.write(uploaded_file.read())
+            # Retrieve multiple uploaded files
+            uploaded_files = request.FILES.getlist('file')
+            if not uploaded_files:
+                return Response({"error": "No files uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Process the file
-            processed_files = process_file(temp_file_path)
+            all_image_results = []  # To store results for each file
+            for uploaded_file in uploaded_files:
+                temp_file_path = f"temp_{uploaded_file.name}"
+                with open(temp_file_path, "wb") as buffer:
+                    buffer.write(uploaded_file.read())
 
-            # Initialize a list to hold the detected information for each image
-            image_results = []
-            oriented_files = [file for file in processed_files if 'oriented' in file]
-            for oriented_file in oriented_files:
-                img = cv2.imread(oriented_file)
-                img_np = np.array(img)
-                image_height, image_width = img_np.shape[:2]
-                tokens_used = (image_height * image_width) // 1000
-                file_name = os.path.basename(oriented_file)
-                doc_type = file_name.split('_')[0]
-                if 'ID' in oriented_file:
-                    detected_info = id(img)
-                elif 'Driving' in oriented_file:
-                    detected_info = driving(img)
-                elif 'vehicle' in oriented_file:
-                    detected_info = vehicle(img)
-                elif 'pass' in oriented_file:
-                    detected_info = pass_certificate(img)
-                elif 'trade' in oriented_file:
-                    detected_info = trade_certificate(img)
-                else:
-                    detected_info = {}
-                image_result = {
-                    "image_metadata": {
-                        "Image_Path": oriented_file,
-                        "Document_Type": doc_type,
-                        "side": "front" if "front" in oriented_file else "back",
-                        "Tokens_Used": tokens_used
-                    },
-                    "detected_data": detected_info
-                }
-                image_results.append(image_result)
+                # Process each file
+                processed_files = process_file(temp_file_path)
+
+                # Initialize a list to hold the detected information for each image
+                image_results = []
+                oriented_files = [file for file in processed_files if 'oriented' in file]
+                for oriented_file in oriented_files:
+                    img = cv2.imread(oriented_file)
+                    img_np = np.array(img)
+                    image_height, image_width = img_np.shape[:2]
+                    tokens_used = (image_height * image_width) // 1000
+                    file_name = os.path.basename(oriented_file)
+                    doc_type = file_name.split('_')[0]
+                    if 'ID' in oriented_file:
+                        detected_info = id(img)
+                    elif 'Driving' in oriented_file:
+                        detected_info = driving(img)
+                    elif 'vehicle' in oriented_file:
+                        detected_info = vehicle(img)
+                    elif 'pass' in oriented_file:
+                        detected_info = pass_certificate(img)
+                    elif 'trade' in oriented_file:
+                        detected_info = trade_certificate(img)
+                    else:
+                        detected_info = {}
+                    image_result = {
+                        "image_metadata": {
+                            "Image_Path": oriented_file,
+                            "Document_Type": doc_type,
+                            "side": "front" if "front" in oriented_file else "back",
+                            "Tokens_Used": tokens_used
+                        },
+                        "detected_data": detected_info
+                    }
+                    image_results.append(image_result)
+
+                # Append results of the current file to the overall results
+                all_image_results.append({
+                    "file_name": uploaded_file.name,
+                    "file_results": image_results
+                })
+
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
 
             processing_time = time.time() - start_time
             response_data = {
                 "overall_metadata": {
                     "Total_PTime": f"{processing_time:.2f} seconds",
-                    "Total_Tokens_Used": sum([result['image_metadata']['Tokens_Used'] for result in image_results]),
                     "Timestamp": datetime.now().isoformat()
                 },
-                "images_results": image_results
+                "files_results": all_image_results
             }
             return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         finally:
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-                
+                shutil.rmtree(os.path.join(os.getcwd(),'cropped_images'))
+                shutil.rmtree(os.path.join(os.getcwd(),'oriented_images'))
+
+
+
 ## encoded view
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesEncodedImageView(APIView):
@@ -746,75 +765,88 @@ class EmiratesEncodedImageView(APIView):
         start_time = time.time()
 
         try:
-            json_file = request.FILES['file']
+            # Retrieve multiple uploaded files
+            json_files = request.FILES.getlist('file')
+            if not json_files:
+                return Response({"error": "No files uploaded"}, status=400)
 
-            if not json_file:
-                return Response({"error": "No file uploaded"}, status=400)
+            all_image_results = []  # To store results for each file
 
-            # Read the file contents and load the JSON data
-            json_data = json.load(json_file)
-            file_data = json_data.get('data')
-            file_ext = json_data.get('ext')
+            for json_file in json_files:
+                # Read the file contents and load the JSON data
+                json_data = json.load(json_file)
+                file_data = json_data.get('data')
+                file_ext = json_data.get('ext')
 
-            if not file_data or not file_ext:
-                return Response({"error": "Invalid JSON format. Must contain 'data' and 'ext' fields."}, status=400)
+                if not file_data or not file_ext:
+                    return Response({"error": f"Invalid JSON format in {json_file.name}. Must contain 'data' and 'ext' fields."}, status=400)
 
-            # Decode base64 content
-            file_bytes = base64.b64decode(file_data)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-                temp_file.write(file_bytes)
-                temp_file_path = temp_file.name
+                # Decode base64 content
+                file_bytes = base64.b64decode(file_data)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+                    temp_file.write(file_bytes)
+                    temp_file_path = temp_file.name
 
+                # Process the file
+                processed_files = process_file(temp_file_path)
 
-            # Process the file
-            processed_files = process_file(temp_file_path)
+                # Initialize a list to hold the detected information for each image
+                image_results = []
+                oriented_files = [file for file in processed_files if 'oriented' in file]
+                for oriented_file in oriented_files:
+                    img = cv2.imread(oriented_file)
+                    img_np = np.array(img)
+                    image_height, image_width = img_np.shape[:2]
+                    tokens_used = (image_height * image_width) // 1000
+                    file_name = os.path.basename(oriented_file)
+                    doc_type = file_name.split('_')[0]
+                    if 'ID' in oriented_file:
+                        detected_info = id(img)
+                    elif 'Driving' in oriented_file:
+                        detected_info = driving(img)
+                    elif 'vehicle' in oriented_file:
+                        detected_info = vehicle(img)
+                    elif 'pass' in oriented_file:
+                        detected_info = pass_certificate(img)
+                    elif 'trade' in oriented_file:
+                        detected_info = trade_certificate(img)
+                    else:
+                        detected_info = {}
+                    image_result = {
+                        "image_metadata": {
+                            "Image_Path": oriented_file,
+                            "Document_Type": doc_type,
+                            "side": "front" if "front" in oriented_file else "back",
+                            "Tokens_Used": tokens_used
+                        },
+                        "detected_data": detected_info
+                    }
+                    image_results.append(image_result)
 
-            # Initialize a list to hold the detected information for each image
-            image_results = []
-            oriented_files = [file for file in processed_files if 'oriented' in file]
-            for oriented_file in oriented_files:
-                img = cv2.imread(oriented_file)
-                img_np = np.array(img)
-                image_height, image_width = img_np.shape[:2]
-                tokens_used = (image_height * image_width) // 1000
-                file_name = os.path.basename(oriented_file)
-                doc_type = file_name.split('_')[0]
-                if 'ID' in oriented_file:
-                    detected_info = id(img)
-                elif 'Driving' in oriented_file:
-                    detected_info = driving(img)
-                elif 'vehicle' in oriented_file:
-                    detected_info = vehicle(img)
-                elif 'pass' in oriented_file:
-                    detected_info = pass_certificate(img)
-                elif 'trade' in oriented_file:
-                    detected_info = trade_certificate(img)
-                else:
-                    detected_info = {}
-                image_result = {
-                    "image_metadata": {
-                        "Image_Path": oriented_file,
-                        "Document_Type": doc_type,
-                        "side": "front" if "front" in oriented_file else "back",
-                        "Tokens_Used": tokens_used
-                    },
-                    "detected_data": detected_info
-                }
-                image_results.append(image_result)
+                # Append results of the current file to the overall results
+                all_image_results.append({
+                    "file_name": json_file.name,
+                    "file_results": image_results
+                })
+
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
 
             processing_time = time.time() - start_time
             response_data = {
                 "overall_metadata": {
                     "Total_PTime": f"{processing_time:.2f} seconds",
-                    "Total_Tokens_Used": sum([result['image_metadata']['Tokens_Used'] for result in image_results]),
                     "Timestamp": datetime.now().isoformat()
                 },
-                "images_results": image_results
+                "files_results": all_image_results
             }
             return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         finally:
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
+                shutil.rmtree(os.path.join(os.getcwd(),'cropped_images'))
+                shutil.rmtree(os.path.join(os.getcwd(),'oriented_images'))
