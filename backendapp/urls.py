@@ -9,7 +9,7 @@ from .views import (
     )
 from .cnic_data_extraction_view import ExtractCNICView, ExtractEncodedCNICView
 from .emirates_data_view import EmiratesDataView, EmiratesEncodedImageView
-from .RAG_VIEW import RAGView
+from .RAG_VIEW import RAGUploadView, RAGGETView, RAGDELETEView
 
 urlpatterns = [
     path('auth/login/', LoginView.as_view(), name='login'),
@@ -39,7 +39,9 @@ urlpatterns = [
     path('tools/use/cnic-encoded-data-extraction/', ExtractEncodedCNICView.as_view(), name='cnic-data-extraction'),
     path('tools/use/emirates-id-processing/', EmiratesDataView.as_view(), name='emirates-id-processing'),
     path('tools/use/emirates-encoded-image-processing/', EmiratesEncodedImageView.as_view(), name='emirates-encoded-image-processing'),
-    path('tools/use/chat-with-pdf/', RAGView.as_view(), name='chat-with-pdf'),
+    path('tools/use/chat-with-pdf/upload/', RAGUploadView.as_view(), name='chat-with-pdf'),
+    path('tools/use/chat-with-pdf/chat/', RAGGETView.as_view(), name='chat-with-pdf'),
+    path('tools/use/chat-with-pdf/delete/', RAGDELETEView.as_view(), name='chat-with-pdf'),
     path('admin/dashboard/', AdminDashboardView.as_view(), name='admin_dashboard'),
     path('admin/users/', AdminUserListView.as_view(), name='admin_user_list'),
     path('admin/privileges/', DelegateAdminPrivilegesView.as_view(), name='delegate_privileges'),
