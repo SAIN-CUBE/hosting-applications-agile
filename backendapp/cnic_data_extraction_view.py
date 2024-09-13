@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 from django.http import JsonResponse
 import re
 import easyocr
+import tempfile
+from rest_framework.parsers import JSONParser
 from .read import text_recognizer
 from rest_framework.permissions import AllowAny
 from .logger.logger import logging
@@ -184,29 +186,25 @@ class ExtractEncodedCNICView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+
         try:
             start_time = time.time()
-            json_file = request.FILES.get('file')
-
-            if not json_file:
-                return JsonResponse({"error": "No file uploaded"}, status=400)
-
-            json_data = json.load(json_file)
-
+            
             # Extract base64 image data and file extension from the JSON
+            json_data = JSONParser().parse(request)
             image_data = json_data.get('data')
-            file_extension = json_data.get('ext')
+            file_ext = json_data.get('ext')
 
-            if not image_data or not file_extension:
+            if not image_data or not file_ext:
                 return JsonResponse({"error": "Invalid JSON format. Must contain 'data' and 'ext' fields."}, status=400)
 
             # Decode the base64 image data
             image_bytes = base64.b64decode(image_data)
 
             # Save the decoded image to a temporary file
-            file_name = f"uploaded_image{file_extension}"
-            with open(file_name, "wb") as image_file:
-                image_file.write(image_bytes)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+                temp_file.write(image_bytes)
+                file_name = temp_file.name
 
             # Process the saved image (similar to the existing OCR endpoint)
             with open(file_name, "rb") as img_file:
@@ -273,7 +271,7 @@ class ExtractEncodedCNICView(APIView):
         except Exception as e:
             logging.error(f"Exception occurred: {e}")
             return Response({"detail": "Internal Server Error"}, status=500)
-
+        
     def load_image_into_numpy_array(self, image_bytes):
         image = Image.open(io.BytesIO(image_bytes))
         return np.array(image)
