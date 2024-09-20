@@ -826,6 +826,51 @@ class CreateSubscriptionView(APIView):
             return Response({'error': 'An error occurred while creating the subscription.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class UpdateSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def put(self, request, plan_name:str):
+        try:
+            subscription = Subscription.objects.get(plan_name=plan_name)
+
+            # Check if the user is allowed to update the subscription (must be an admin)
+            if not request.user.is_admin:
+                logging.warning("Unauthorized subscription creation attempt by user: %s", request.user.email)
+                return Response({'error': 'You do not have permission to update this subscription.'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Deserialize and update the subscription object with the new data
+            serializer = SubscriptionSerializer(subscription, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                logging.info("subscrition updated successfully by user: %s", request.user.email)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            logging.warning("Invalid subscription data provided by user: %s", request.user.email)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Subscription.DoesNotExist:
+            logging.warning("Subscription doesn't exist")
+            return Response({'error': f'Subscription with plan name "{plan_name}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+    
+class DeleteSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def delete(self, request, plan_name):
+        try:
+            subscription = Subscription.objects.get(plan_name=plan_name)
+
+            if not request.user.is_admin:
+                logging.warning("Unauthorized subscription creation attempt by user: %s", request.user.email)
+                
+                return Response({'error': 'You do not have permission to delete this subscription.'}, status=status.HTTP_403_FORBIDDEN)
+
+            # Delete the subscription
+            subscription.delete()
+            logging.info(f'Subscription "{plan_name}" deleted successfully.')
+            return Response({'msg': f'Subscription "{plan_name}" deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+        except Subscription.DoesNotExist:
+            return Response({'error': f'Subscription with plan name "{plan_name}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 class AIToolListView(APIView):
     permission_classes = [AllowAny]
 
