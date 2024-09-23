@@ -308,7 +308,7 @@ def trade_certificate(img):
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesDataView(APIView):
     parser_classes = [MultiPartParser]
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         start_time = time.time()
@@ -464,7 +464,7 @@ class EmiratesDataView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesEncodedImageView(APIView):
     parser_classes = [MultiPartParser]
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         data = JSONParser().parse(request)
