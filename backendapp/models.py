@@ -176,3 +176,20 @@ class PDFDocument(models.Model):
 
     def __str__(self):
         return self.file_path
+    
+class ToolUsage(models.Model):
+    used_at = models.DateField()
+    used_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tool_usage')
+    tool_name = models.CharField(max_length=500)
+    credits_used = models.IntegerField(default=0)
+    remaining_credits = models.IntegerField(default=0)
+    confidence_score = models.FloatField(blank=True, null=True)  # Storing confidence score as float
+
+    def __str__(self):
+        return f"{self.used_by} used {self.credits_used} credits for {self.tool_name} on {self.used_at}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['used_at']),
+            models.Index(fields=['used_by']),
+        ]

@@ -95,7 +95,7 @@ def create_or_load_user_vector_store(user):
         raise
 
 
-def setup_rag_chain(vector_store):
+def setup_rag_chain(vector_store, system_prompt):
     llm = ChatGroq(
         model="mixtral-8x7b-32768",
         temperature=0,
@@ -106,7 +106,7 @@ def setup_rag_chain(vector_store):
     
     retriever = vector_store.as_retriever(search_kwargs={"k": 3})
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an AI assistant tasked with answering questions based on the provided document. Your goal is to give direct and concise answers to the user's questions without adding explanations or references about where the information was found. If the answer is not in the document, simply state 'I don't know.' Do not provide any additional context or details beyond the direct answer."),
+        ("system", system_prompt),
         ("human", "Context: {context}\n\nQuestion: {question}")
     ])
     
@@ -120,26 +120,33 @@ def setup_rag_chain(vector_store):
     
     return rag_chain
 
-class RAGUploadView(APIView):
+class RAGPROMPTUploadView(APIView):
     permission_classes = [IsAuthenticated]
 
     # POST: Handle document uploads and update the vector store
     def post(self, request):
         # get multiple pdfs in one request
         files = request.FILES.getlist('file')
+        prompt = request.data.get('prompt')
         logging.info(f"Files uploaded {files}")
         print(len(files))
+        
+        if not prompt:
+            return Response({"error": "Prompt is required"}, status=400)
 
         if not files:
             logging.info(f"No file provided")
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = request.user
+        print(prompt)
+        prompt_path = default_storage.save(f'tmp2/{user.id}/prompt.txt', ContentFile(prompt))
 
         errors = []
         success_files = []
 
         for file in files:
-            user = request.user
-            prev_file_path = f'tmp/{user.id}/{file.name}'
+            prev_file_path = f'tmp2/{user.id}/{file.name}'
 
             # Check if file is a valid PDF
             if not file.name.lower().endswith('.pdf'):
@@ -205,7 +212,7 @@ class RAGUploadView(APIView):
             }, status=status.HTTP_200_OK)
             
 
-class RAGGETView(APIView):
+class RAGPROMPTGETView(APIView):
     permission_classes = [IsAuthenticated]
     
     # GET: Handle question answering using the existing vector store
@@ -232,8 +239,15 @@ class RAGGETView(APIView):
             logging.error("No question provided")
             return Response({"error": "No question provided"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Extract the system prompt from a file
+        with open(f'tmp2/{user.id}/prompt.txt', 'r') as file:
+            system_prompt = file.read()
+            print("File readed:", system_prompt)
+            logging.info(f"System prompt loaded..")
+            
+        
         # Set up the RAG chain with the vector store
-        rag_chain = setup_rag_chain(vector_store)
+        rag_chain = setup_rag_chain(vector_store, system_prompt=system_prompt)
 
         start_time = time.time()
         result = rag_chain.invoke({"query": question})
@@ -316,9 +330,9 @@ class RAGGETView(APIView):
             raise e
                 
              
-class RAGDELETEView(APIView):
+class RAGPROMPTDELETEView(APIView):
     permission_classes = [IsAuthenticated]
-             
+    
     def delete(self, request):
         document_names = request.data.get('document_names')
         if not document_names or not isinstance(document_names, list):
@@ -339,7 +353,7 @@ class RAGDELETEView(APIView):
         for document_name in document_names:
             try:
                 # Try to retrieve the PDFDocument entry from the database for the user
-                pdf_doc = PDFDocument.objects.get(file_path=f'tmp/{user.id}/{document_name}', user=user)
+                pdf_doc = PDFDocument.objects.get(file_path=f'tmp2/{user.id}/{document_name}', user=user)
             except PDFDocument.DoesNotExist:
                 errors.append(f"Document '{document_name}' not found in the database or not owned by the user")
                 continue

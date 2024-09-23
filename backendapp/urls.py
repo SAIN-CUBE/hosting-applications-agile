@@ -1,23 +1,22 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
-    LoginView, RegisterView, LogoutView, ResendOTPView, VerifyOTPView, VisitorOverviewView,
+    LoginView, RegisterView, LogoutView, VisitorOverviewView,
     UserDashboardView, UserDetailsView, UserUpdateView, TeamListView, AddTeamMemberView,
     UpdateTeamMemberView, DeleteTeamMemberView, CreditListView, AssignCreditsView, TransactionHistoryView,
     SubscriptionListView, CreateSubscriptionView, AIToolListView, UseAIToolView, AdminDashboardView, AdminUserListView,
-    DelegateAdminPrivilegesView, UserActivityLogView, GenerateReportView, SendPasswordResetEmailView, UserPasswordResetView,
-    UpdateSubscriptionView, DeleteSubscriptionView
+    DelegateAdminPrivilegesView, UserActivityLogView, GenerateReportView, SendPasswordResetEmailView,
+    UserPasswordResetView, UpdateSubscriptionView, DeleteSubscriptionView
     )
 from .cnic_data_extraction_view import ExtractCNICView, ExtractEncodedCNICView
 from .emirates_data_view import EmiratesDataView, EmiratesEncodedImageView
 from .RAG_VIEW import RAGUploadView, RAGGETView, RAGDELETEView
+from rest_framework_simplejwt.views import TokenRefreshView
+from .RAG_PROMPT_VIEW import RAGPROMPTUploadView, RAGPROMPTGETView, RAGPROMPTDELETEView
 
 urlpatterns = [
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
-    path('auth/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
-    path('auth/resend-otp/', ResendOTPView.as_view(), name='resend-otp'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/password-reset/', SendPasswordResetEmailView.as_view(), name='send-reset-password-email'),
     path('auth/password-reset/<uid>/<token>/', UserPasswordResetView.as_view(), name='reset-password'),
@@ -45,6 +44,9 @@ urlpatterns = [
     path('tools/use/chat-with-pdf/upload/', RAGUploadView.as_view(), name='chat-with-pdf'),
     path('tools/use/chat-with-pdf/chat/', RAGGETView.as_view(), name='chat-with-pdf'),
     path('tools/use/chat-with-pdf/delete/', RAGDELETEView.as_view(), name='chat-with-pdf'),
+    path('tools/use/chat-with-promptpdf/upload/', RAGPROMPTUploadView.as_view(), name='chat-with-pdf'),
+    path('tools/use/chat-with-promptpdf/chat/', RAGPROMPTGETView.as_view(), name='chat-with-pdf'),
+    path('tools/use/chat-with-promptpdf/delete/', RAGPROMPTDELETEView.as_view(), name='chat-with-pdf'),
     path('admin/dashboard/', AdminDashboardView.as_view(), name='admin_dashboard'),
     path('admin/users/', AdminUserListView.as_view(), name='admin_user_list'),
     path('admin/privileges/', DelegateAdminPrivilegesView.as_view(), name='delegate_privileges'),
