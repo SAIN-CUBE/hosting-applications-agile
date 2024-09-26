@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Credit, Subscription, AITool, Log, Team, Transaction
+from .models import Credit, Subscription, AITool, Log, Team, Transaction, Features
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.encoding import smart_str, force_bytes, DjangoUnicodeDecodeError
@@ -180,16 +180,34 @@ class CreditSerializer(serializers.ModelSerializer):
         model = Credit
         fields = ['total_credits', 'used_credits', 'remaining_credits']
 
+class FeatureSerializer(serializers.ModelSerializer):
+  class Meta:
+      model = Features
+      fields = ['features']
+
 class SubscriptionSerializer(serializers.ModelSerializer):
+    # features = FeatureSerializer(many=True, source='subscription_features', required=False)
+    features = serializers.SerializerMethodField()
+    
     class Meta:
         model = Subscription
         fields = ('plan_name', 'price', 'credit_limit', 'features', 'duration')
+        
+    def get_features(self, obj):
+        # Extract the feature names and return them as a list of strings
+        return list(obj.subscription_features.values_list('features', flat=True))
+
 
 class SubscriptionCreateSerializer(serializers.ModelSerializer):
+    features = serializers.SerializerMethodField()
     user_email = serializers.EmailField(source='user.email', read_only=True)
     class Meta:
         model = Subscription
         fields = ('plan_name', 'price', 'credit_limit', 'features', 'duration', 'user_email')
+        
+    def get_features(self, obj):
+        # Extract the feature names and return them as a list of strings
+        return list(obj.subscription_features.values_list('features', flat=True))
 
 class AIToolSerializer(serializers.ModelSerializer):
     class Meta:

@@ -9,7 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from .models import User, Credit, AITool, Team, Transaction, Subscription, Log
+from .models import User, Credit, AITool, Team, Transaction, Subscription, Log, Features
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
@@ -783,93 +783,139 @@ class TransactionHistoryView(APIView):
 
 class SubscriptionListView(APIView):
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         try:
-            subscriptions = Subscription.objects.all()
-            if not subscriptions.exists():
-                return Response({'message': 'No subscriptions available at the moment.'}, status=status.HTTP_404_NOT_FOUND)
-
+            subscriptions = Subscription.objects.prefetch_related('subscription_features').all()  # Prefetch related features
             serializer = SubscriptionSerializer(subscriptions, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
+            logging.info(f"Retrieved {len(subscriptions)} subscriptions.")
+            return Response(serializer.data)
         except Exception as e:
-            logging.exception("An error occurred while fetching subscriptions.")
-            return Response({'error': 'An error occurred while retrieving subscriptions.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logging.error(f"Error retrieving subscriptions: {e}", exc_info=True)
+            return Response({'error': 'Failed to retrieve subscriptions'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class CreateSubscriptionView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
+    # permission_classes = [AllowAny]
 
     def post(self, request):
         try:
-            # Check if the user has admin privileges
-            if not request.user.is_admin:
-                logging.warning("Unauthorized subscription creation attempt by user: %s", request.user.email)
-                return Response({'error': 'You do not have permission to access this resource.'}, status=status.HTTP_403_FORBIDDEN)
+            subscription_data = request.data
+            # print("Data", subscription_data)
+            subscription = Subscription.objects.filter(plan_name= subscription_data['plan_name'])
+            # print("subscription_name", subscription)
+            if subscription.exists():
+                return Response({'error': 'Subscription with plan name already exists.'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Deserialize and validate the subscription data
             serializer = SubscriptionCreateSerializer(data=request.data)
+
             if serializer.is_valid():
-                serializer.save()
+                # Save the subscription instance
+                subscription = serializer.save()
 
-                # Log the successful subscription creation
-                logging.info("Subscription created successfully by admin user: %s", request.user.email)
+                # Handle the features field (list of strings)
+                features = request.data.get('features', [])
+                if isinstance(features, list):
+                    for feature_name in features:
+                        Features.objects.create(subscription_name=subscription, features=feature_name)
 
+                logging.info(f"Created subscription plan '{subscription.plan_name}' with features {features}")
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             
-            # Handle invalid serializer data
-            logging.warning("Invalid subscription data provided by user: %s", request.user.email)
+            logging.warning(f"Subscription creation failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         except Exception as e:
-            logging.exception("An error occurred while creating the subscription for user: %s", request.user.email)
-            return Response({'error': 'An error occurred while creating the subscription.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logging.error(f"Error creating subscription: {e}", exc_info=True)
+            return Response({'error': 'Failed to create subscription'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UpdateSubscriptionView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
+    # permission_classes = [AllowAny]
 
-    def put(self, request, plan_name:str):
+    def put(self, request, plan_name: str):
         try:
             subscription = Subscription.objects.get(plan_name=plan_name)
 
-            # Check if the user is allowed to update the subscription (must be an admin)
-            if not request.user.is_admin:
-                logging.warning("Unauthorized subscription creation attempt by user: %s", request.user.email)
-                return Response({'error': 'You do not have permission to update this subscription.'}, status=status.HTTP_403_FORBIDDEN)
-
-            # Deserialize and update the subscription object with the new data
+            # Deserialize and update the subscription object
             serializer = SubscriptionSerializer(subscription, data=request.data, partial=True)
-            
+
             if serializer.is_valid():
-                serializer.save()
-                logging.info("subscrition updated successfully by user: %s", request.user.email)
+                subscription = serializer.save()
+
+                # Handle features update
+                features = request.data.get('features', [])
+                if isinstance(features, list):
+                    # Delete old features and create new ones
+                    Features.objects.filter(subscription_name=subscription).delete()
+                    for feature_name in features:
+                        Features.objects.create(subscription_name=subscription, features=feature_name)
+
+                logging.info(f"Updated subscription '{plan_name}' with features {features}")
                 return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            logging.warning("Invalid subscription data provided by user: %s", request.user.email)
+
+            logging.warning(f"Subscription update failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         except Subscription.DoesNotExist:
-            logging.warning("Subscription doesn't exist")
+            logging.error(f"Subscription with plan name '{plan_name}' not found")
             return Response({'error': f'Subscription with plan name "{plan_name}" not found.'}, status=status.HTTP_404_NOT_FOUND)
-    
+        except Exception as e:
+            logging.error(f"Error updating subscription '{plan_name}': {e}", exc_info=True)
+            return Response({'error': 'Failed to update subscription'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class DeleteSubscriptionView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
+    # permission_classes = [AllowAny]
 
     def delete(self, request, plan_name):
         try:
             subscription = Subscription.objects.get(plan_name=plan_name)
 
+            # Check if the user is allowed to delete the subscription (must be an admin)
             if not request.user.is_admin:
-                logging.warning("Unauthorized subscription creation attempt by user: %s", request.user.email)
-                
+                logging.warning(f"Unauthorized deletion attempt by user '{request.user.email}' on subscription '{plan_name}'")
                 return Response({'error': 'You do not have permission to delete this subscription.'}, status=status.HTTP_403_FORBIDDEN)
 
             # Delete the subscription
+            # print(subscription)
             subscription.delete()
-            logging.info(f'Subscription "{plan_name}" deleted successfully.')
+            # logging.info(f"Subscription '{plan_name}' deleted by user '{request.user.email}'")
             return Response({'msg': f'Subscription "{plan_name}" deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
         except Subscription.DoesNotExist:
+            logging.error(f"Subscription with plan name '{plan_name}' not found")
             return Response({'error': f'Subscription with plan name "{plan_name}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            # logging.error(f"Error deleting subscription '{plan_name}': {e}", exc_info=True)
+            return Response({'error': 'Failed to delete subscription'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeleteFeatureView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    # permission_classes = [AllowAny]
+
+    def delete(self, request, plan_name: str, features: str):
+        try:
+            subscription = Subscription.objects.get(plan_name=plan_name)
+            feature = Features.objects.get(subscription_name=subscription, features=features)
+
+            # Delete the specific feature
+            feature.delete()
+            logging.info(f"Feature '{features}' from subscription '{plan_name}' deleted")
+            return Response({'msg': f'Feature "{features}" from subscription "{plan_name}" deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+        except Subscription.DoesNotExist:
+            logging.error(f"Subscription with plan name '{plan_name}' not found")
+            return Response({'error': f'Subscription with plan name "{plan_name}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Features.DoesNotExist:
+            logging.error(f"Feature '{features}' not found for subscription '{plan_name}'")
+            return Response({'error': f'Feature "{features}" not found for subscription "{plan_name}".'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logging.error(f"Error deleting feature '{features}' from subscription '{plan_name}': {e}", exc_info=True)
+            return Response({'error': 'Failed to delete feature'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class AIToolListView(APIView):
     permission_classes = [AllowAny]

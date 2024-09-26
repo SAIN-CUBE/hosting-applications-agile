@@ -133,18 +133,25 @@ class Subscription(models.Model):
     plan_name = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     credit_limit = models.IntegerField()
-    features = models.TextField()
+    # features = models.TextField()
     duration = models.CharField(max_length=20, choices=Duration.choices)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         if self.user:
-            return f"Subscription for {self.user.email}"
+            return f"Subscription {self.plan_name} created successfully"
         elif self.team:
-            return f"Subscription for {self.team.team_name}"
+            return f"Subscription {self.plan_name} created successfully"
         else:
             return "Unassigned Subscription"
+        
+class Features(models.Model):
+    subscription_name = models.ForeignKey(Subscription, on_delete=models.CASCADE, related_name="subscription_features")
+    features = models.CharField(max_length=1000, blank=True)
+    
+    def __str__(self):
+        return f"{self.subscription_name.plan_name} - {self.features}"
 
 class Log(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='logs')
