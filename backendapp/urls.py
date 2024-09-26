@@ -5,7 +5,7 @@ from .views import (
     UpdateTeamMemberView, DeleteTeamMemberView, CreditListView, AssignCreditsView, TransactionHistoryView,
     SubscriptionListView, CreateSubscriptionView, AIToolListView, UseAIToolView, AdminDashboardView, AdminUserListView,
     DelegateAdminPrivilegesView, UserActivityLogView, GenerateReportView, SendPasswordResetEmailView,
-    UserPasswordResetView, UpdateSubscriptionView, DeleteSubscriptionView, DeleteFeatureView
+    UserPasswordResetView, UpdateSubscriptionView, DeleteSubscriptionView, DeleteFeatureView, TeamCreationView
     )
 from .cnic_data_extraction_view import ExtractCNICView, ExtractEncodedCNICView
 from .emirates_data_view import EmiratesDataView, EmiratesEncodedImageView
@@ -26,6 +26,7 @@ urlpatterns = [
     path('user/update/', UserUpdateView.as_view(), name='user_update'),
     path('team/', TeamListView.as_view(), name='team'),
     path('team/add/', AddTeamMemberView.as_view(), name='add member'),
+    path('team/create/', TeamCreationView.as_view(), name='team-create-update'),
     path('team/update/<int:id>/', UpdateTeamMemberView.as_view(), name='team_update'),
     path('team/delete/<int:id>/', DeleteTeamMemberView.as_view(), name='team_delete'),
     path('credits/', CreditListView.as_view(), name='credit_balance'),

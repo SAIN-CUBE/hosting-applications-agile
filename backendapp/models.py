@@ -2,6 +2,9 @@ from django.db import models
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+# from social_core.pipeline.partial import partial
+
+# AUTH_PROVIDERS = {"email":"email", "google":"google"}
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, password2=None, **extra_fields):
@@ -34,6 +37,7 @@ class User(AbstractBaseUser):
     last_name = models.CharField(max_length=30)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    # team = models.ForeignKey("backendapp.Team", on_delete=models.SET_NULL, null=True, blank=True, related_name='members')  # Add team field
     team = models.CharField(max_length=50, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
@@ -41,15 +45,15 @@ class User(AbstractBaseUser):
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    otp = models.CharField(max_length=6, blank=True, null=True)  # Add this line
     
     objects = UserManager()
     
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['first_name', 'last_name', 'phone_number']
-    
+    REQUIRED_FIELDS = ['first_name', 'last_name']
+
     def __str__(self):
         return self.email
+
 
     def has_perm(self, perm, obj=None):
         return self.is_admin
@@ -140,18 +144,11 @@ class Subscription(models.Model):
 
     def __str__(self):
         if self.user:
-            return f"Subscription {self.plan_name} created successfully"
+            return f"Subscription for {self.user.email}"
         elif self.team:
-            return f"Subscription {self.plan_name} created successfully"
+            return f"Subscription for {self.team.team_name}"
         else:
             return "Unassigned Subscription"
-        
-class Features(models.Model):
-    subscription_name = models.ForeignKey(Subscription, on_delete=models.CASCADE, related_name="subscription_features")
-    features = models.CharField(max_length=1000, blank=True)
-    
-    def __str__(self):
-        return f"{self.subscription_name.plan_name} - {self.features}"
 
 class Log(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='logs')
@@ -175,6 +172,14 @@ class AITool(models.Model):
     def __str__(self):
         return self.tool_name
 
+class TeamMember(models.Model):
+    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} in {self.team.team_name}"
+    
 class PDFDocument(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pdf_documents')
     file_path = models.CharField(max_length=500, unique=True)
@@ -183,7 +188,9 @@ class PDFDocument(models.Model):
 
     def __str__(self):
         return self.file_path
-    
+
+
+
 class ToolUsage(models.Model):
     used_at = models.DateField()
     used_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tool_usage')
@@ -200,3 +207,20 @@ class ToolUsage(models.Model):
             models.Index(fields=['used_at']),
             models.Index(fields=['used_by']),
         ]
+        
+class Features(models.Model):
+    subscription_name = models.ForeignKey(Subscription, on_delete=models.CASCADE, related_name="subscription_features")
+    features = models.CharField(max_length=1000, blank=True)
+    
+    def __str__(self):
+        return f"{self.subscription_name.plan_name} - {self.features}"
+
+class ApiCallLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='api_calls')
+    # api_name = models.CharField(max_length=255)
+    tool_name = models.CharField(max_length=255, blank=True, null=True)
+    credits_used = models.IntegerField(default=0)  # Credits used in the API call
+    timestamp = models.DateTimeField(auto_now_add=True)  # When the API was called
+
+    def __str__(self):
+        return f"API call: {self.tool_name} by {self.user.email} on {self.timestamp}"

@@ -17,7 +17,7 @@ from .serializers import (
     CustomTokenObtainPairSerializer, UserRegistrationSerializer, SendPasswordResetEmailSerializer
     , UserSerializer  , UserPasswordResetSerializer,
     SubscriptionSerializer, SubscriptionCreateSerializer , AIToolSerializer, LogSerializer, UserLoginSerializer
-    ,CreditSerializer, UserUpdateSerializer, TransactionSerializer
+    ,CreditSerializer, UserUpdateSerializer, TransactionSerializer, TeamCreationSerializer
 )
 from django.contrib.auth import authenticate
 from rest_framework.pagination import PageNumberPagination
@@ -419,7 +419,7 @@ class TeamListView(APIView):
             # Fetch team members
             team = teams.first()
             logging.info("Fetching team members for team: %s by org_admin: %s", team.team_name, request.user.email)
-            team_members = User.objects.filter(team=team.team_name, role=User.ROLE_CHOICES[1][0].lower(), is_active=True)
+            team_members = User.objects.filter(team=team.team_name, is_active=True)
 
             # Pagination logic
             paginator = StandardResultsSetPagination()
@@ -438,6 +438,19 @@ class TeamListView(APIView):
         except Exception as e:
             logging.exception("An unexpected error occurred: %s", str(e))
             return Response({"error": "An error occurred. Please try again later.", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class TeamCreationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user  # Get the authenticated user
+        serializer = TeamCreationSerializer(instance=user, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'message': 'Team created/updated successfully.'}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 class AddTeamMemberView(APIView):
     permission_classes = [IsAuthenticated]
@@ -576,7 +589,9 @@ class DeleteTeamMemberView(APIView):
                 return Response({"detail": "Team member not found."}, status=status.HTTP_404_NOT_FOUND)
 
             # Proceed to deactivate the team member
-            team_member.is_active = False
+            # team_member.is_active = False
+            team_member.role = 'visitor'
+            team_member.team = 'no team'
             team_member.save()
 
             # Check if the email is in the pending emails list and remove it if so
