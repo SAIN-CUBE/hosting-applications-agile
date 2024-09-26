@@ -5,7 +5,7 @@ from .views import (
     UpdateTeamMemberView, DeleteTeamMemberView, CreditListView, AssignCreditsView, TransactionHistoryView,
     SubscriptionListView, CreateSubscriptionView, AIToolListView, UseAIToolView, AdminDashboardView, AdminUserListView,
     DelegateAdminPrivilegesView, UserActivityLogView, GenerateReportView, SendPasswordResetEmailView,
-    UserPasswordResetView, UpdateSubscriptionView, DeleteSubscriptionView
+    UserPasswordResetView, UpdateSubscriptionView, DeleteSubscriptionView, DeleteFeatureView
     )
 from .cnic_data_extraction_view import ExtractCNICView, ExtractEncodedCNICView
 from .emirates_data_view import EmiratesDataView, EmiratesEncodedImageView
@@ -35,6 +35,7 @@ urlpatterns = [
     path('subscriptions/create/', CreateSubscriptionView.as_view(), name='subscription_create'),
     path('subscriptions/update/<str:plan_name>/', UpdateSubscriptionView.as_view(), name='subscription_update'),
     path('subscriptions/delete/<str:plan_name>/', DeleteSubscriptionView.as_view(), name='subscription_delete'),
+    path('subscriptions/delete-feature/<str:plan_name>/<str:features>/', DeleteFeatureView.as_view(), name='delete_feature'),
     path('tools/', AIToolListView.as_view(), name='tool_list'),
     path('tools/use/', UseAIToolView.as_view(), name='tool_list'),
     path('tools/use/cnic-data-extraction/', ExtractCNICView.as_view(), name='cnic-data-extraction'),
