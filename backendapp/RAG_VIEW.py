@@ -215,6 +215,13 @@ class RAGGETView(APIView):
     def get(self, request):
         user = request.user
         vector_store_path = f'document_embeddings/{user.id}'
+        
+        # Extract the source identifier from custom header or fallback to "api"
+        source = request.headers.get('Call-Source', 'api')  # Default to 'api' if header not provided
+
+        # Validate source (only allow "app" or "api")
+        if source not in ['app', 'api']:
+            return Response({'error': 'Invalid source. Must be "app" or "api".'}, status=400)
 
         # Check if the user's vector store exists
         if not os.path.exists(vector_store_path):
@@ -251,26 +258,20 @@ class RAGGETView(APIView):
         
         try:
             # Directly handle the credit deduction for this tool usage
-            self.deduct_credits(request.user, count,  "chat-with-pdf")
-            # Create the API call log object
-            ApiCallLog.objects.create(
-                user=request.user,
-                tool_name= "chat-with-pdf",
-                credits_used=count,
-                timestamp=now()
-            )
-            print("API call log created successfully.")
+            logging.info("Deducting credits...")
+            self.deduct_credits(request.user, count,  "chat-with-pdf", source)
+            logging.info(f"Credits deducted for {request.user.email} for chat-with-pdf")
+            logging.info(f"question : {question} \n response:{result['result']}")
+            return Response({
+                "answer": result['result'],
+                "time_taken": end_time - start_time
+            }, status=status.HTTP_200_OK)
         except Exception as e:
             print(f"Error creating ApiCallLog: {e}")
+            return Response({"error": f"error : {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
 
-        logging.info(f"question : {question} \n response:{result['result']}")
-        return Response({
-            "answer": result['result'],
-            "time_taken": end_time - start_time
-        }, status=status.HTTP_200_OK)
-    
-    def deduct_credits(self, user, tokens_used, tool_name):
+    def deduct_credits(self, user, tokens_used, tool_name, source):
         """
         Directly handle credit deduction within the CNIC extraction view.
         Accumulate tool usage for the same day if the same tool is used multiple times.
@@ -281,6 +282,7 @@ class RAGGETView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
+            print(credits.remaining_credits)
             print(tokens_used)
 
             # Check if user has enough credits
@@ -317,6 +319,19 @@ class RAGGETView(APIView):
                         credits_used=tokens_used,
                         remaining_credits=credits.remaining_credits
                     )
+                    
+                try:
+                # Create the API call log object
+                    ApiCallLog.objects.create(
+                        user=user,
+                        tool_name='chat-with-pdf',
+                        credits_used=tokens_used,
+                        source = source,
+                        timestamp=now()
+                    )
+                    print("API call log created successfully.")
+                except Exception as e:
+                    print(f"Error creating ApiCallLog: {e}")
                 logging.info(f"Credits deducted for user {user.email}: {tokens_used} tokens used today for {tool_name}.")
             else:
                 logging.warning(f"User {user.email} has insufficient credits for {tool_name}.")
@@ -325,12 +340,14 @@ class RAGGETView(APIView):
         except AITool.DoesNotExist:
             logging.error(f"Tool {tool_name} not found.")
             raise ValueError("Tool not found")
+            
         except Credit.DoesNotExist:
             logging.error(f"Credit record for user {user.email} not found.")
-            raise ValueError("Credit record not found")
+            raise ValueError(f"Credit record for user {user.email} not found.")
         except Exception as e:
             logging.error(f"Error deducting credits for user {user.email}: {e}")
             raise e
+
                 
              
 class RAGDELETEView(APIView):

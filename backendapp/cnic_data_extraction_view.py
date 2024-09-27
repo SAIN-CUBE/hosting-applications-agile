@@ -17,105 +17,9 @@ from .read import text_recognizer
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import JSONParser
 from .logger.logger import logging
-from .models import AITool, Credit, ToolUsage
-from .authentication import SIDAuthentication
+from .models import AITool, Credit, ToolUsage, ApiCallLog
 from django.utils.timezone import now
-
-
-# class ExtractCNICView(APIView):
-#     parser_classes = [MultiPartParser, FormParser]
-#     authentication_classes = []
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         # file = request.FILES.get('cnic')
-#         # logging.info("file uploaded for cnic data extraction")
-
-#         # if file is None:
-#         #     return Response({"detail": "No file was provided in the request."}, status=400)
-
-#         # if not file.content_type.startswith('image'):
-#         #     return Response({"detail": "Invalid file type. Only image files are allowed."}, status=400)
-
-#         # start_time = time.time()
-#         files = request.FILES.getlist('cnic')
-#         logging.info(f"{len(files)} file(s) uploaded for CNIC data extraction")
-
-#         if not files:
-#             return Response({"detail": "No files were provided in the request."}, status=400)
-
-#         response_data_list = []
-#         start_time = time.time()
-
-#         for file in files:
-#             if not file.content_type.startswith('image'):
-#                 return Response({"detail": f"Invalid file type for {file.name}. Only image files are allowed."}, status=400)
-
-
-#             try:
-#                 img_np = self.load_image_into_numpy_array(file.read())
-#                 image_height, image_width = img_np.shape[:2]
-#                 image = Image.fromarray(img_np)
-
-#                 chip_detection_model = settings.CHIP_DETECTION_MODEL
-#                 chip_results = chip_detection_model.predict(source=image, conf=0.4, imgsz=1280, save=False, nms=True)
-#                 chip_boxes = chip_results[0].boxes.xyxy.cpu().numpy().tolist()
-
-#                 response_data = {
-#                     "metadata": {
-#                         "Mod": "eng" if chip_boxes else "urd",
-#                         "Side": "front" if chip_boxes else "back",
-#                         "PTime": None,
-#                         "Tokens_Used": None,
-#                         "Timestamp": datetime.now().isoformat()
-#                     },
-#                     "data": None
-#                 }
-
-#                 if chip_boxes:
-#                     # Perform English OCR
-#                     gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-#                     ocr_results = self.perform_ocr(gray, ['en'])
-#                     texts = [text for (_, text, _) in ocr_results]
-#                     cnic_data = self.extract_cnic_data(texts)
-#                     response_data["data"] = cnic_data
-#                 else:
-#                     urdu_detection_model = settings.URDU_DETECTION_MODEL
-#                     urdu_recognition_model = settings.URDU_RECOGNITION_MODEL
-#                     urdu_converter = settings.URDU_CONVERTER
-#                     urdu_device = settings.URDU_DEVICE
-
-#                     detection_results = urdu_detection_model.predict(source=image, conf=0.5, imgsz=1280, save=False, nms=True, device=urdu_device)
-#                     bounding_boxes = detection_results[0].boxes.xyxy.cpu().numpy().tolist()
-#                     bounding_boxes.sort(key=lambda x: x[1])
-
-#                     cropped_images = [image.crop(box) for box in bounding_boxes]
-
-#                     texts = [text_recognizer(img, urdu_recognition_model, urdu_converter, urdu_device) for img in cropped_images]
-#                     urdu_text = "\n".join(texts)
-
-#                     translated_text = GoogleTranslator(source='ur', target='en').translate(urdu_text)
-
-#                     formatted_data = self.format_translated_text(translated_text)
-
-#                     response_data["data"] = {
-#                         "urdu_text": urdu_text,
-#                         "translated_text": translated_text,
-#                         "formatted_data": formatted_data
-#                     }
-
-#                 processing_time = time.time() - start_time
-#                 response_data["metadata"]["PTime"] = f"{processing_time:.2f} s"
-#                 tokens_used = (image_width * image_height) // 1000
-#                 response_data["metadata"]["Tokens_Used"] = tokens_used
-
-#                 return JsonResponse(response_data)
-
-#             except Exception as e:
-#                 logging.error(f"Exception occurred: {e}")
-#                 return Response({"detail": "Internal Server Error"}, status=500)
-            
-#         return JsonResponse({"files_data": response_data_list}, safe=False)
+from .authentication import SIDAuthentication
 
 class ExtractCNICView(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -126,14 +30,21 @@ class ExtractCNICView(APIView):
         files = request.FILES.getlist('cnic')
         logging.info(f"{len(files)} file(s) uploaded for CNIC data extraction")
 
+        # Extract the source identifier from custom header or fallback to "api"
+        source = request.headers.get('Call-Source', 'api')  # Default to 'api' if header not provided
+
+        # Validate source (only allow "app" or "api")
+        if source not in ['app', 'api']:
+            return Response({'error': 'Invalid source. Must be "app" or "api".'}, status=400)
+
         if not files:
             return Response({"detail": "No files were provided in the request."}, status=400)
 
         response_data_list = []
         start_time = time.time()
+        # credits = Credit.objects.get(user)
 
         tokens = 0
-        
         for file in files:
             if not file.content_type.startswith('image'):
                 return Response({"detail": f"Invalid file type for {file.name}. Only image files are allowed."}, status=400)
@@ -200,23 +111,22 @@ class ExtractCNICView(APIView):
                 tokens += tokens_used
                 print(f"Tokens Used for {file}: ", tokens_used//100)
                 
-                # Directly handle the credit deduction for this tool usage
-                # self.deduct_credits(request.user, tokens_used//100, "cnic-data-extraction")
 
             except Exception as e:
                 logging.error(f"Exception occurred for {file.name}: {e}")
                 return Response({"detail": f"Internal Server Error for file {file.name}"}, status=500)
+
         try:
             logging.info("Deducting credits...")
-            self.deduct_credits(request.user, tokens//100, "cnic-data-extraction")
+            self.deduct_credits(request.user, tokens//100, "cnic-data-extraction", source)
             logging.info(f"Credits deducted for {request.user.email} for cnic-data-extraction")
+            return JsonResponse({"files_data": response_data_list}, safe=False)
         except Exception as e:
             logging.error(f"Error deducting credits: {e}")
-        
-        return JsonResponse({"files_data": response_data_list}, safe=False)
+            return Response({"error": f"error in deucting credits {e}"})
     
 
-    def deduct_credits(self, user, tokens_used, tool_name):
+    def deduct_credits(self, user, tokens_used, tool_name, source):
         """
         Directly handle credit deduction within the CNIC extraction view.
         Accumulate tool usage for the same day if the same tool is used multiple times.
@@ -227,6 +137,7 @@ class ExtractCNICView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
+            print(credits.remaining_credits)
             print(tokens_used)
 
             # Check if user has enough credits
@@ -263,6 +174,19 @@ class ExtractCNICView(APIView):
                         credits_used=tokens_used,
                         remaining_credits=credits.remaining_credits
                     )
+                    
+                try:
+                # Create the API call log object
+                    ApiCallLog.objects.create(
+                        user=user,
+                        tool_name='cnic-data-extraction',
+                        credits_used=tokens_used,
+                        source = source,
+                        timestamp=now()
+                    )
+                    print("API call log created successfully.")
+                except Exception as e:
+                    print(f"Error creating ApiCallLog: {e}")
                 logging.info(f"Credits deducted for user {user.email}: {tokens_used} tokens used today for {tool_name}.")
             else:
                 logging.warning(f"User {user.email} has insufficient credits for {tool_name}.")
@@ -271,9 +195,10 @@ class ExtractCNICView(APIView):
         except AITool.DoesNotExist:
             logging.error(f"Tool {tool_name} not found.")
             raise ValueError("Tool not found")
+            
         except Credit.DoesNotExist:
             logging.error(f"Credit record for user {user.email} not found.")
-            raise ValueError("Credit record not found")
+            raise ValueError(f"Credit record for user {user.email} not found.")
         except Exception as e:
             logging.error(f"Error deducting credits for user {user.email}: {e}")
             raise e
@@ -367,95 +292,103 @@ class ExtractEncodedCNICView(APIView):
 
     def post(self, request):
 
-        try:
-            start_time = time.time()
-            
-            # Extract base64 image data and file extension from the JSON
-            json_data = JSONParser().parse(request)
-            image_data = json_data.get('data')
-            file_ext = json_data.get('ext')
+        # try:
+        start_time = time.time()
+        
+        # Extract base64 image data and file extension from the JSON
+        json_data = JSONParser().parse(request)
+        image_data = json_data.get('data')
+        file_ext = json_data.get('ext')
+        
+        source = request.headers.get('Call-Source', 'api')  # Default to 'api' if header not provided
 
-            if not image_data or not file_ext:
-                return JsonResponse({"error": "Invalid JSON format. Must contain 'data' and 'ext' fields."}, status=400)
+        # Validate source (only allow "app" or "api")
+        if source not in ['app', 'api']:
+            return Response({'error': 'Invalid source. Must be "app" or "api".'}, status=400)
 
-            # Decode the base64 image data
-            image_bytes = base64.b64decode(image_data)
 
-            # Save the decoded image to a temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-                temp_file.write(image_bytes)
-                file_name = temp_file.name
+        if not image_data or not file_ext:
+            return JsonResponse({"error": "Invalid JSON format. Must contain 'data' and 'ext' fields."}, status=400)
 
-            # Process the saved image (similar to the existing OCR endpoint)
-            with open(file_name, "rb") as img_file:
-                img_np = self.load_image_into_numpy_array(img_file.read())
+        # Decode the base64 image data
+        image_bytes = base64.b64decode(image_data)
 
-            image = Image.fromarray(img_np)
+        # Save the decoded image to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            temp_file.write(image_bytes)
+            file_name = temp_file.name
 
-            
-            chip_detection_model = settings.CHIP_DETECTION_MODEL
-            chip_results = chip_detection_model.predict(source=image, conf=0.4, imgsz=1280, save=False, nms=True)
-            chip_boxes = chip_results[0].boxes.xyxy.cpu().numpy().tolist()
+        # Process the saved image (similar to the existing OCR endpoint)
+        with open(file_name, "rb") as img_file:
+            img_np = self.load_image_into_numpy_array(img_file.read())
 
-            response_data = {
-                "metadata": {
-                    "Mod": "eng" if chip_boxes else "urd",
-                    "Side": "front" if chip_boxes else "back",
-                    "PTime": None,
-                    "Tokens_Used": None,
-                    "Timestamp": datetime.now().isoformat()
-                },
-                "data": None
+        image = Image.fromarray(img_np)
+
+        
+        chip_detection_model = settings.CHIP_DETECTION_MODEL
+        chip_results = chip_detection_model.predict(source=image, conf=0.4, imgsz=1280, save=False, nms=True)
+        chip_boxes = chip_results[0].boxes.xyxy.cpu().numpy().tolist()
+
+        response_data = {
+            "metadata": {
+                "Mod": "eng" if chip_boxes else "urd",
+                "Side": "front" if chip_boxes else "back",
+                "PTime": None,
+                "Tokens_Used": None,
+                "Timestamp": datetime.now().isoformat()
+            },
+            "data": None
+        }
+
+        if chip_boxes:
+            # Perform English OCR
+            gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+            ocr_results = self.perform_ocr(gray, ['en'])
+            texts = [text for (_, text, _) in ocr_results]
+            cnic_data = self.extract_cnic_data(texts)
+            response_data["data"] = cnic_data
+        else:
+            urdu_detection_model = settings.URDU_DETECTION_MODEL
+            urdu_recognition_model = settings.URDU_RECOGNITION_MODEL
+            urdu_converter = settings.URDU_CONVERTER
+            urdu_device = settings.URDU_DEVICE
+
+            detection_results = urdu_detection_model.predict(source=image, conf=0.5, imgsz=1280, save=False, nms=True, device=urdu_device)
+            bounding_boxes = detection_results[0].boxes.xyxy.cpu().numpy().tolist()
+            bounding_boxes.sort(key=lambda x: x[1])
+
+            cropped_images = [image.crop(box) for box in bounding_boxes]
+
+            texts = [text_recognizer(img, urdu_recognition_model, urdu_converter, urdu_device) for img in cropped_images]
+            urdu_text = "\n".join(texts)
+
+            translated_text = GoogleTranslator(source='ur', target='en').translate(urdu_text)
+
+            formatted_data = self.format_translated_text(translated_text)
+
+            response_data["data"] = {
+                "urdu_text": urdu_text,
+                "translated_text": translated_text,
+                "formatted_data": formatted_data
             }
 
-            if chip_boxes:
-                # Perform English OCR
-                gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-                ocr_results = self.perform_ocr(gray, ['en'])
-                texts = [text for (_, text, _) in ocr_results]
-                cnic_data = self.extract_cnic_data(texts)
-                response_data["data"] = cnic_data
-            else:
-                urdu_detection_model = settings.URDU_DETECTION_MODEL
-                urdu_recognition_model = settings.URDU_RECOGNITION_MODEL
-                urdu_converter = settings.URDU_CONVERTER
-                urdu_device = settings.URDU_DEVICE
-
-                detection_results = urdu_detection_model.predict(source=image, conf=0.5, imgsz=1280, save=False, nms=True, device=urdu_device)
-                bounding_boxes = detection_results[0].boxes.xyxy.cpu().numpy().tolist()
-                bounding_boxes.sort(key=lambda x: x[1])
-
-                cropped_images = [image.crop(box) for box in bounding_boxes]
-
-                texts = [text_recognizer(img, urdu_recognition_model, urdu_converter, urdu_device) for img in cropped_images]
-                urdu_text = "\n".join(texts)
-
-                translated_text = GoogleTranslator(source='ur', target='en').translate(urdu_text)
-
-                formatted_data = self.format_translated_text(translated_text)
-
-                response_data["data"] = {
-                    "urdu_text": urdu_text,
-                    "translated_text": translated_text,
-                    "formatted_data": formatted_data
-                }
-
-            processing_time = time.time() - start_time
-            response_data["metadata"]["PTime"] = f"{processing_time:.2f} s"
-            image_height, image_width = img_np.shape[:2]
-            tokens_used = (image_width * image_height) // 1000
-            response_data["metadata"]["Tokens_Used"] = tokens_used
-
-            # Directly handle the credit deduction for this tool usage
-            self.deduct_credits(request.user, tokens_used//100, "cnic-data-extraction")
-            
-            return JsonResponse(response_data)
-
-        except Exception as e:
-            logging.error(f"Exception occurred: {e}")
-            return Response({"detail": "Internal Server Error"}, status=500)
+        processing_time = time.time() - start_time
+        response_data["metadata"]["PTime"] = f"{processing_time:.2f} s"
+        image_height, image_width = img_np.shape[:2]
+        tokens_used = (image_width * image_height) // 1000
+        response_data["metadata"]["Tokens_Used"] = tokens_used
         
-    def deduct_credits(self, user, tokens_used, tool_name):
+        print("Tokens used:", tokens_used//100)
+        try:
+            logging.info("Deducting credits...")
+            self.deduct_credits(request.user, tokens_used//100, "cnic-data-extraction", source)
+            logging.info(f"Credits deducted for {request.user.email} for cnic-data-extraction")
+            return JsonResponse({"file_data": response_data}, safe=False)
+        except Exception as e:
+            logging.error(f"Error deducting credits: {e}")
+            return Response({"error": f"error in deucting credits {e}"})
+        
+    def deduct_credits(self, user, tokens_used, tool_name, source):
         """
         Directly handle credit deduction within the CNIC extraction view.
         Accumulate tool usage for the same day if the same tool is used multiple times.
@@ -466,6 +399,7 @@ class ExtractEncodedCNICView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
+            print(credits.remaining_credits)
             print(tokens_used)
 
             # Check if user has enough credits
@@ -502,6 +436,19 @@ class ExtractEncodedCNICView(APIView):
                         credits_used=tokens_used,
                         remaining_credits=credits.remaining_credits
                     )
+                    
+                try:
+                # Create the API call log object
+                    ApiCallLog.objects.create(
+                        user=user,
+                        tool_name=tool_name,
+                        credits_used=tokens_used,
+                        source = source,
+                        timestamp=now()
+                    )
+                    print("API call log created successfully.")
+                except Exception as e:
+                    print(f"Error creating ApiCallLog: {e}")
                 logging.info(f"Credits deducted for user {user.email}: {tokens_used} tokens used today for {tool_name}.")
             else:
                 logging.warning(f"User {user.email} has insufficient credits for {tool_name}.")
@@ -510,12 +457,14 @@ class ExtractEncodedCNICView(APIView):
         except AITool.DoesNotExist:
             logging.error(f"Tool {tool_name} not found.")
             raise ValueError("Tool not found")
+            
         except Credit.DoesNotExist:
             logging.error(f"Credit record for user {user.email} not found.")
-            raise ValueError("Credit record not found")
+            raise ValueError(f"Credit record for user {user.email} not found.")
         except Exception as e:
             logging.error(f"Error deducting credits for user {user.email}: {e}")
             raise e
+
     
     
     def load_image_into_numpy_array(self, image_bytes):

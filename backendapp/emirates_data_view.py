@@ -21,7 +21,7 @@ from django.utils.decorators import method_decorator
 import warnings
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .logger.logger import logging
-from .models import AITool, Credit, ToolUsage
+from .models import AITool, Credit, ToolUsage, ApiCallLog
 from django.utils.timezone import now
 from .authentication import SIDAuthentication
 warnings.filterwarnings("ignore")
@@ -305,18 +305,26 @@ def trade_certificate(img):
     # Remove any null values from the detected_info dictionary
     return {k: v for k, v in detected_info.items() if v is not None}
 
-# Django API View
+
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesDataView(APIView):
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
     authentication_classes = [SIDAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         start_time = time.time()
         try:
             # Retrieve multiple uploaded files
             uploaded_files = request.FILES.getlist('file')
+            
+            # Extract the source identifier from custom header or fallback to "api"
+            source = request.headers.get('Call-Source', 'api')  # Default to 'api' if header not provided
+
+            # Validate source (only allow "app" or "api")
+            if source not in ['app', 'api']:
+                return Response({'error': 'Invalid source. Must be "app" or "api".'}, status=400)
+            
             if not uploaded_files:
                 return Response({"error": "No files uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -384,10 +392,18 @@ class EmiratesDataView(APIView):
                 "files_results": all_image_results
             }
             
-            print("tokens", tokens)
-            # Directly handle the credit deduction for this tool usage
-            self.deduct_credits(request.user, tokens//100, "emirates-data-extraction")
-            return Response(response_data, status=status.HTTP_200_OK)
+            # print("tokens", tokens)
+            
+            try:
+                logging.info("Deducting credits...")
+                self.deduct_credits(request.user, tokens//100, "emirates-data-extraction", source)
+                logging.info(f"Credits deducted for {request.user.email} for emirates-data-extraction")
+                return Response(response_data, status=status.HTTP_200_OK)
+            except Exception as e:
+                print(f"Error creating ApiCallLog: {e}")
+                raise e
+                
+            # return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -399,7 +415,7 @@ class EmiratesDataView(APIView):
                 shutil.rmtree(os.path.join(os.getcwd(),'oriented_images'))
 
 
-    def deduct_credits(self, user, tokens_used, tool_name):
+    def deduct_credits(self, user, tokens_used, tool_name, source):
         """
         Directly handle credit deduction within the CNIC extraction view.
         Accumulate tool usage for the same day if the same tool is used multiple times.
@@ -410,7 +426,8 @@ class EmiratesDataView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
-            print(tokens_used)
+            # print(credits.remaining_credits)
+            # print(tokens_used)
 
             # Check if user has enough credits
             if credits.remaining_credits >= tokens_used:
@@ -446,6 +463,19 @@ class EmiratesDataView(APIView):
                         credits_used=tokens_used,
                         remaining_credits=credits.remaining_credits
                     )
+                    
+                try:
+                # Create the API call log object
+                    ApiCallLog.objects.create(
+                        user=user,
+                        tool_name='emirates-data-extraction',
+                        credits_used=tokens_used,
+                        source = source,
+                        timestamp=now()
+                    )
+                    print("API call log created successfully.")
+                except Exception as e:
+                    print(f"Error creating ApiCallLog: {e}")
                 logging.info(f"Credits deducted for user {user.email}: {tokens_used} tokens used today for {tool_name}.")
             else:
                 logging.warning(f"User {user.email} has insufficient credits for {tool_name}.")
@@ -454,15 +484,14 @@ class EmiratesDataView(APIView):
         except AITool.DoesNotExist:
             logging.error(f"Tool {tool_name} not found.")
             raise ValueError("Tool not found")
+            
         except Credit.DoesNotExist:
             logging.error(f"Credit record for user {user.email} not found.")
-            raise ValueError("Credit record not found")
+            raise ValueError(f"Credit record for user {user.email} not found.")
         except Exception as e:
             logging.error(f"Error deducting credits for user {user.email}: {e}")
             raise e
-    
 
-## encoded view
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesEncodedImageView(APIView):
     parser_classes = [MultiPartParser]
@@ -473,6 +502,13 @@ class EmiratesEncodedImageView(APIView):
         data = JSONParser().parse(request)
         base64_data = data.get('data')
         file_ext = data.get('ext')
+        
+        # Extract the source identifier from custom header or fallback to "api"
+        source = request.headers.get('Call-Source', 'api')  # Default to 'api' if header not provided
+
+        # Validate source (only allow "app" or "api")
+        if source not in ['app', 'api']:
+            return Response({'error': 'Invalid source. Must be "app" or "api".'}, status=400)
 
         if not base64_data or not file_ext:
             return Response({"error": "Invalid input"}, status=status.HTTP_400_BAD_REQUEST)
@@ -536,10 +572,15 @@ class EmiratesEncodedImageView(APIView):
             }
 
             
-            print("tokens", tokens_used)
-            # Directly handle the credit deduction for this tool usage
-            self.deduct_credits(request.user, tokens_used//100, "emirates-data-extraction")
-            return Response(response_data)
+            # print("tokens", tokens_used)
+            try:
+                logging.info("Deducting credits...")
+                self.deduct_credits(request.user, tokens_used//100, "emirates-data-extraction", source)
+                logging.info(f"Credits deducted for {request.user.email} for emirates-data-extraction")
+                return Response(response_data, status=status.HTTP_200_OK)
+            except Exception as e:
+                print(f"Error creating ApiCallLog: {e}")
+                raise e
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -548,7 +589,7 @@ class EmiratesEncodedImageView(APIView):
             if 'temp_file_path' in locals():
                 os.remove(temp_file_path)
                 
-    def deduct_credits(self, user, tokens_used, tool_name):
+    def deduct_credits(self, user, tokens_used, tool_name, source):
         """
         Directly handle credit deduction within the CNIC extraction view.
         Accumulate tool usage for the same day if the same tool is used multiple times.
@@ -559,7 +600,8 @@ class EmiratesEncodedImageView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
-            print(tokens_used)
+            # print(credits.remaining_credits)
+            # print(tokens_used)
 
             # Check if user has enough credits
             if credits.remaining_credits >= tokens_used:
@@ -595,6 +637,19 @@ class EmiratesEncodedImageView(APIView):
                         credits_used=tokens_used,
                         remaining_credits=credits.remaining_credits
                     )
+                    
+                try:
+                # Create the API call log object
+                    ApiCallLog.objects.create(
+                        user=user,
+                        tool_name='emirates-data-extraction',
+                        credits_used=tokens_used,
+                        source = source,
+                        timestamp=now()
+                    )
+                    print("API call log created successfully.")
+                except Exception as e:
+                    print(f"Error creating ApiCallLog: {e}")
                 logging.info(f"Credits deducted for user {user.email}: {tokens_used} tokens used today for {tool_name}.")
             else:
                 logging.warning(f"User {user.email} has insufficient credits for {tool_name}.")
@@ -603,10 +658,12 @@ class EmiratesEncodedImageView(APIView):
         except AITool.DoesNotExist:
             logging.error(f"Tool {tool_name} not found.")
             raise ValueError("Tool not found")
+            
         except Credit.DoesNotExist:
             logging.error(f"Credit record for user {user.email} not found.")
-            raise ValueError("Credit record not found")
+            raise ValueError(f"Credit record for user {user.email} not found.")
         except Exception as e:
             logging.error(f"Error deducting credits for user {user.email}: {e}")
             raise e
+
     

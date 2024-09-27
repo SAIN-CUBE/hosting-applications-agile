@@ -220,7 +220,8 @@ class ApiCallLog(models.Model):
     # api_name = models.CharField(max_length=255)
     tool_name = models.CharField(max_length=255, blank=True, null=True)
     credits_used = models.IntegerField(default=0)  # Credits used in the API call
+    source = models.CharField(max_length=10)
     timestamp = models.DateTimeField(auto_now_add=True)  # When the API was called
 
     def __str__(self):
-        return f"API call: {self.tool_name} by {self.user.email} on {self.timestamp}"
+        return f"API call: {self.tool_name} by {self.user.email} via {self.source} on {self.timestamp}"
