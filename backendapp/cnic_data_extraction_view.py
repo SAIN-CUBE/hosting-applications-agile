@@ -18,6 +18,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import JSONParser
 from .logger.logger import logging
 from .models import AITool, Credit, ToolUsage
+from .authentication import SIDAuthentication
 from django.utils.timezone import now
 
 
@@ -118,7 +119,7 @@ from django.utils.timezone import now
 
 class ExtractCNICView(APIView):
     parser_classes = [MultiPartParser, FormParser]
-    # authentication_classes = []
+    authentication_classes = [SIDAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -361,7 +362,7 @@ class ExtractCNICView(APIView):
 
 class ExtractEncodedCNICView(APIView):
     parser_classes = [MultiPartParser, FormParser]
-    # authentication_classes = []
+    authentication_classes = [SIDAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):

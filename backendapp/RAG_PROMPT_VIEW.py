@@ -22,8 +22,9 @@ import shutil
 from faiss import IndexFlatL2
 import re
 from langchain_community.docstore.in_memory import InMemoryDocstore
-from .models import AITool, ToolUsage, Credit
+from .models import AITool, ToolUsage, Credit, ApiCallLog
 from django.utils.timezone import now
+from .authentication import SIDAuthentication
 
 User = get_user_model()
 # Set your Groq API key
@@ -122,28 +123,35 @@ def setup_rag_chain(vector_store, system_prompt):
 
 class RAGPROMPTUploadView(APIView):
     permission_classes = [IsAuthenticated]
+    authentication_classes = [SIDAuthentication]
 
     # POST: Handle document uploads and update the vector store
     def post(self, request):
         # get multiple pdfs in one request
+        errors = []
+        success_files = []
         files = request.FILES.getlist('file')
         prompt = request.data.get('prompt')
         logging.info(f"Files uploaded {files}")
         print(len(files))
+        user = request.user
         
         if not prompt:
-            return Response({"error": "Prompt is required"}, status=400)
-
-        if not files:
-            logging.info(f"No file provided")
-            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+            errors.append("Prompt is required")
         
-        user = request.user
-        print(prompt)
-        prompt_path = default_storage.save(f'tmp2/{user.id}/prompt.txt', ContentFile(prompt))
+        # checking if pdfs are already uplioaded by a user
+        if not files:
+            if os.path.exists(f'tmp2/{user.id}/'):
+                pdf_present = any(file.lower().endswith(".pdf") for file in os.listdir(f'tmp2/{user.id}/'))
+                errors.append("PDFs already provided by the user" if pdf_present else "No PDFs uploaded by the user")
+            else:
+                errors.append("User directory does not exist")
 
-        errors = []
-        success_files = []
+        # checking or updating the prompt
+        if prompt:
+            if default_storage.exists(f'tmp2/{user.id}/prompt.txt'):
+                default_storage.delete(f'tmp2/{user.id}/prompt.txt')
+            prompt_path = default_storage.save(f'tmp2/{user.id}/prompt.txt', ContentFile(prompt))       
 
         for file in files:
             prev_file_path = f'tmp2/{user.id}/{file.name}'
@@ -214,6 +222,7 @@ class RAGPROMPTUploadView(APIView):
 
 class RAGPROMPTGETView(APIView):
     permission_classes = [IsAuthenticated]
+    authentication_classes = [SIDAuthentication]
     
     # GET: Handle question answering using the existing vector store
     def get(self, request):
@@ -258,7 +267,21 @@ class RAGPROMPTGETView(APIView):
         print(count)
         
         # Directly handle the credit deduction for this tool usage
-        self.deduct_credits(request.user, count, "chat-with-pdf")
+        # self.deduct_credits(request.user, count, "chat-with-pdf")
+        
+        try:
+            # Directly handle the credit deduction for this tool usage
+            self.deduct_credits(request.user, count,  "chat-with-pdf")
+            # Create the API call log object
+            ApiCallLog.objects.create(
+                user=request.user,
+                tool_name= "chat-with-pdf",
+                credits_used=count,
+                timestamp=now()
+            )
+            print("API call log created successfully.")
+        except Exception as e:
+            print(f"Error creating ApiCallLog: {e}")
             
 
         logging.info(f"question : {question} \n response:{result['result']}")
@@ -332,7 +355,9 @@ class RAGPROMPTGETView(APIView):
              
 class RAGPROMPTDELETEView(APIView):
     permission_classes = [IsAuthenticated]
-    
+    authentication_classes = [SIDAuthentication]
+             
+    # DELETE: Delete vector store and recreate it
     def delete(self, request):
         document_names = request.data.get('document_names')
         if not document_names or not isinstance(document_names, list):

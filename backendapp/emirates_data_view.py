@@ -23,6 +23,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .logger.logger import logging
 from .models import AITool, Credit, ToolUsage
 from django.utils.timezone import now
+from .authentication import SIDAuthentication
 warnings.filterwarnings("ignore")
 
 # # Load the YOLO backendapp/em_models from backendapp/em_models directory
@@ -309,6 +310,7 @@ def trade_certificate(img):
 class EmiratesDataView(APIView):
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated]
+    authentication_classes = [SIDAuthentication]
 
     def post(self, request, *args, **kwargs):
         start_time = time.time()
@@ -465,6 +467,7 @@ class EmiratesDataView(APIView):
 class EmiratesEncodedImageView(APIView):
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated]
+    authentication_classes = [SIDAuthentication]
 
     def post(self, request):
         data = JSONParser().parse(request)

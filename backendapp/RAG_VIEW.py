@@ -22,8 +22,9 @@ import shutil
 from faiss import IndexFlatL2
 import re
 from langchain_community.docstore.in_memory import InMemoryDocstore
-from .models import AITool, ToolUsage, Credit
+from .models import AITool, ToolUsage, Credit, ApiCallLog
 from django.utils.timezone import now
+from .authentication import SIDAuthentication
 
 User = get_user_model()
 # Set your Groq API key
@@ -122,6 +123,7 @@ def setup_rag_chain(vector_store):
 
 class RAGUploadView(APIView):
     permission_classes = [IsAuthenticated]
+    authentication_classes = [SIDAuthentication]
 
     # POST: Handle document uploads and update the vector store
     def post(self, request):
@@ -207,6 +209,7 @@ class RAGUploadView(APIView):
 
 class RAGGETView(APIView):
     permission_classes = [IsAuthenticated]
+    authentication_classes = [SIDAuthentication]
     
     # GET: Handle question answering using the existing vector store
     def get(self, request):
@@ -244,7 +247,21 @@ class RAGGETView(APIView):
         print(count)
         
         # Directly handle the credit deduction for this tool usage
-        self.deduct_credits(request.user, count, "chat-with-pdf")
+        # self.deduct_credits(request.user, count, "chat-with-pdf")
+        
+        try:
+            # Directly handle the credit deduction for this tool usage
+            self.deduct_credits(request.user, count,  "chat-with-pdf")
+            # Create the API call log object
+            ApiCallLog.objects.create(
+                user=request.user,
+                tool_name= "chat-with-pdf",
+                credits_used=count,
+                timestamp=now()
+            )
+            print("API call log created successfully.")
+        except Exception as e:
+            print(f"Error creating ApiCallLog: {e}")
             
 
         logging.info(f"question : {question} \n response:{result['result']}")
@@ -318,7 +335,9 @@ class RAGGETView(APIView):
              
 class RAGDELETEView(APIView):
     permission_classes = [IsAuthenticated]
-             
+    authentication_classes = [SIDAuthentication]
+    
+    # DELETE: Delete vector store and recreate it
     def delete(self, request):
         document_names = request.data.get('document_names')
         if not document_names or not isinstance(document_names, list):
