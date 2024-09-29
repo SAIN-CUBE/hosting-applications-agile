@@ -21,21 +21,10 @@ from django.utils.decorators import method_decorator
 import warnings
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .logger.logger import logging
-from .models import AITool, Credit, ToolUsage, ApiCallLog
+from .models import AITool, Credit, ToolUsage, ApiCallLog, DocumentProcessing
 from django.utils.timezone import now
 from .authentication import SIDAuthentication
 warnings.filterwarnings("ignore")
-
-# # Load the YOLO backendapp/em_models from backendapp/em_models directory
-# driving_model = YOLO("backendapp/em_models/driving_front_back.pt")
-# id_model = YOLO("backendapp/em_models/ID_front_back.pt")
-# vehicle_model = YOLO("backendapp/em_models/vehicle_front_back.pt")
-# pass_model = YOLO("backendapp/em_models/pass.pt")
-# trade_model = YOLO("backendapp/em_models/trade.pt")
-
-# # Load the OCR reader
-# reader = easyocr.Reader(['en'])
-# ar_en_reader = easyocr.Reader(['ar', 'en'])
 
 special_chars = r'[!@#$%^&*()_+=\[\]{};:\'",.<>?`~]'
 
@@ -72,12 +61,16 @@ def process_file(file_path: str, model_path: str = 'backendapp/em_models/classif
             for j, box in enumerate(result.boxes.xyxy):
                 class_idx = int(result.boxes.cls[j].item())
                 class_name = result.names[class_idx]
+                confidence = result.boxes.conf[j].item()
+                confidence = round(confidence, 2)
+                
                 parts = class_name.split('_')
                 if len(parts) == 3:
                     doc_type, side, orient = parts
                     xmin, ymin, xmax, ymax = map(int, box)
                     cropped_img = img.crop((xmin, ymin, xmax, ymax))
-                    cropped_img_name = f'{doc_type}_{side}_{orient}_{i}_{j}_cropped.jpg'
+                    # cropped_img_name = f'{doc_type}_{side}_{orient}_{i}_{j}_cropped.jpg'
+                    cropped_img_name = f'{doc_type}_{side}_{orient}_{i}_{j}_{confidence}_cropped.jpg'
                     cropped_img_path = os.path.join(cropped_dir, cropped_img_name)
                     cropped_img.save(cropped_img_path)
                     processed_images.append(cropped_img_path)
@@ -85,7 +78,8 @@ def process_file(file_path: str, model_path: str = 'backendapp/em_models/classif
                         rotation_angle = rotation_map[orient]
                         if rotation_angle != 0:
                             cropped_img = cropped_img.rotate(rotation_angle, expand=True)
-                    oriented_img_name = f'{doc_type}_{side}_{orient}_{i}_{j}_oriented.jpg'
+                    # oriented_img_name = f'{doc_type}_{side}_{orient}_{i}_{j}_oriented.jpg'
+                    oriented_img_name = f'{doc_type}_{side}_{orient}_{i}_{j}_{confidence}_oriented.jpg'
                     oriented_img_path = os.path.join(oriented_dir, oriented_img_name)
                     cropped_img.save(oriented_img_path)
                     processed_images.append(oriented_img_path)
@@ -112,7 +106,8 @@ def id(img):
         'Employer': 'Employer',
         'Occupation': 'Occupation',
         'Place of issue': 'Place of issue',
-        'Issue Date' : 'Issue Date'
+        'Issue Date' : 'Issue Date',
+        'confidence': 'confidence'
         }
     detected_info = {
         'Name': None,
@@ -124,7 +119,8 @@ def id(img):
         'Employer': None,
         'Occupation': None,
         'Place of issue': None,
-        'Issue Date': None
+        'Issue Date': None,
+        'confidence': None
     }
     id_model = settings.ID_MODEL
     results = id_model.predict(img, line_width=2)
@@ -157,7 +153,8 @@ def driving(img):
         'License No': 'License No',
         'Nationality': 'Nationality',
         'Place of Issue': 'Place of Issue',
-        'Traffic Code No': 'Traffic Code No'
+        'Traffic Code No': 'Traffic Code No',
+        'confidence': 'confidence'
     }
 
     detected_info = {
@@ -168,7 +165,8 @@ def driving(img):
         'License No': None,
         'Nationality': None,
         'Place of Issue': None,
-        'Traffic Code No': None
+        'Traffic Code No': None,
+        'confidence': None
     }
 
     driving_model = settings.DRIVING_MODEL
@@ -207,7 +205,9 @@ def vehicle(img):
         "Origin":'Origin',
         "veh type":'veh type',
         "Eng no":'Eng no',
-        "chassis no":'chassis no'}
+        "chassis no":'chassis no',
+        'confidence': 'confidence'
+        }
     
     detected_info = {
         "TC no": None,
@@ -222,7 +222,9 @@ def vehicle(img):
         "Origin": None,
         "veh type": None,
         "Eng no": None,
-        "chassis no": None}
+        "chassis no": None,
+        'confidence': None
+        }
     
     vehicle_model = settings.VEHICLE_MODEL
     results = vehicle_model.predict(img, line_width=1)
@@ -246,10 +248,12 @@ def vehicle(img):
 # Function for Pass
 def pass_certificate(img):
     class_names = {
-        'inspection date': 'inspection date'
+        'inspection date': 'inspection date',
+        'confidence': 'confidence'
         }
     detected_info = {
-        'inspection date': None
+        'inspection date': None,
+        'confidence': None
     }
     pass_model = settings.PASS_MODEL
     results = pass_model.predict(img, line_width=2)
@@ -277,13 +281,15 @@ def trade_certificate(img):
         'Trade Name': 'trade name',
         'Issue Date': 'issue date',
         'Exp Date': 'exp date',
-        'activity': 'activity'
+        'activity': 'activity',
+        'confidence': 'confidence'
     }
     detected_info = {
         'trade name': None,
         'issue date': None,
         'exp date': None,
-        'activity': None
+        'activity': None,
+        'confidence': None
     }
 
     trade_model = settings.TRADE_MODEL
@@ -348,6 +354,7 @@ class EmiratesDataView(APIView):
                     tokens_used = (image_height * image_width) // 1000
                     file_name = os.path.basename(oriented_file)
                     doc_type = file_name.split('_')[0]
+                    confidence = file_name.split('_')[-2]
                     if 'ID' in oriented_file:
                         detected_info = id(img)
                     elif 'Driving' in oriented_file:
@@ -364,11 +371,21 @@ class EmiratesDataView(APIView):
                         "image_metadata": {
                             "Image_Path": oriented_file,
                             "Document_Type": doc_type,
+                             "Confidence_score": confidence,
                             "side": "front" if "front" in oriented_file else "back",
                             "Tokens_Used": tokens_used
                         },
                         "detected_data": detected_info
                     }
+                    
+                    #ceating document processing image for each file
+                    DocumentProcessing.objects.create(
+                        tool_name = "emirates-data-extraction",
+                        document_type = doc_type,
+                        document_side = "front" if "front" in oriented_file else "back",
+                        confidence_score = confidence,
+                        timestamp = now()
+                    )
                     
                     tokens  += tokens_used
 
@@ -392,7 +409,7 @@ class EmiratesDataView(APIView):
                 "files_results": all_image_results
             }
             
-            # print("tokens", tokens)
+            print("tokens", tokens)
             
             try:
                 logging.info("Deducting credits...")
@@ -426,8 +443,8 @@ class EmiratesDataView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
-            # print(credits.remaining_credits)
-            # print(tokens_used)
+            print(credits.remaining_credits)
+            print(tokens_used)
 
             # Check if user has enough credits
             if credits.remaining_credits >= tokens_used:
@@ -492,6 +509,7 @@ class EmiratesDataView(APIView):
             logging.error(f"Error deducting credits for user {user.email}: {e}")
             raise e
 
+    
 @method_decorator(csrf_exempt, name='dispatch')
 class EmiratesEncodedImageView(APIView):
     parser_classes = [MultiPartParser]
@@ -572,7 +590,9 @@ class EmiratesEncodedImageView(APIView):
             }
 
             
-            # print("tokens", tokens_used)
+            print("tokens", tokens_used)
+            # Directly handle the credit deduction for this tool usage
+            # self.deduct_credits(request.user, tokens_used//100, "emirates-data-extraction")
             try:
                 logging.info("Deducting credits...")
                 self.deduct_credits(request.user, tokens_used//100, "emirates-data-extraction", source)
@@ -600,8 +620,8 @@ class EmiratesEncodedImageView(APIView):
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
-            # print(credits.remaining_credits)
-            # print(tokens_used)
+            print(credits.remaining_credits)
+            print(tokens_used)
 
             # Check if user has enough credits
             if credits.remaining_credits >= tokens_used:

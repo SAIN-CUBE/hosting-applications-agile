@@ -9,7 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from .models import User, Credit, AITool, Team, Transaction, Subscription, Log, Features
+from .models import User, Credit, AITool, Team, Transaction, Subscription, Log, Features, ToolUsage, ApiCallLog
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
@@ -17,7 +17,7 @@ from .serializers import (
     CustomTokenObtainPairSerializer, UserRegistrationSerializer, SendPasswordResetEmailSerializer
     , UserSerializer  , UserPasswordResetSerializer,
     SubscriptionSerializer, SubscriptionCreateSerializer , AIToolSerializer, LogSerializer, UserLoginSerializer
-    ,CreditSerializer, UserUpdateSerializer, TransactionSerializer, TeamCreationSerializer
+    ,CreditSerializer, UserUpdateSerializer, TransactionSerializer, TeamCreationSerializer, TeamSerializer
 )
 from django.contrib.auth import authenticate
 from rest_framework.pagination import PageNumberPagination
@@ -27,6 +27,8 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Sum, Count
+from django.db.models.functions import TruncDay
 import logging
 from rest_framework_simplejwt.exceptions import TokenError
 
@@ -400,44 +402,96 @@ class UserUpdateView(APIView):
             logging.exception("An error occurred while updating user: %s", request.user.email)
             return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# class TeamListView(APIView):
+#     permission_classes = [IsAuthenticated]
+    
+#     def get(self, request):
+#         try:
+#             # Check if the user has the appropriate role
+#             if request.user.role.lower() != 'org_admin':
+#                 logging.warning("Unauthorized access attempt by user: %s", request.user.email)
+#                 return Response({"detail": "Not authorized to view this resource."}, status=status.HTTP_403_FORBIDDEN)
+
+#             # Fetch teams associated with the organization admin
+#             teams = Team.objects.filter(org_admin=request.user)
+#             if not teams.exists():
+#                 logging.info("No teams found for org_admin: %s", request.user.email)
+#                 return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
+
+#             # Fetch team members
+#             team = teams.first()
+#             logging.info("Fetching team members for team: %s by org_admin: %s", team.team_name, request.user.email)
+#             team_members = User.objects.filter(team=team.team_name, is_active=True)
+
+#             # Pagination logic
+#             paginator = StandardResultsSetPagination()
+#             page = paginator.paginate_queryset(team_members, request)
+#             if page is not None:
+#                 serializer = UserSerializer(page, many=True)
+#                 return paginator.get_paginated_response(serializer.data)
+
+#             # Return team members without pagination if pagination is not applicable
+#             serializer = UserSerializer(team_members, many=True)
+#             return Response(serializer.data, status=status.HTTP_200_OK)
+
+#         except Exception.ObjectDoesNotExist as e:
+#             logging.error("Object does not exist: %s", str(e))
+#             return Response({"detail": "Requested resource not found."}, status=status.HTTP_404_NOT_FOUND)
+#         except Exception as e:
+#             logging.exception("An unexpected error occurred: %s", str(e))
+#             return Response({"error": "An error occurred. Please try again later.", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class TeamListView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         try:
-            # Check if the user has the appropriate role
-            if request.user.role.lower() != 'org_admin':
-                logging.warning("Unauthorized access attempt by user: %s", request.user.email)
+            # Case 1: If the user is an org_admin, show only their teams and members
+            if request.user.role.lower() == 'org_admin':
+                teams = Team.objects.filter(org_admin=request.user)
+                if not teams.exists():
+                    logging.info("No teams found for org_admin: %s", request.user.email)
+                    return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
+
+                # Get all members of the first team (assuming one team per org_admin)
+                
+                team_members = User.objects.filter(team=teams.first().team_name, is_active=True)
+                logging.info("Fetching team members for team: %s by org_admin: %s", teams.team_name, request.user.email)
+
+                paginator = StandardResultsSetPagination()
+                page = paginator.paginate_queryset(team_members, request)
+                if page is not None:
+                    serializer = UserSerializer(page, many=True)
+                    return paginator.get_paginated_response(serializer.data)
+                
+                serializer = UserSerializer(team_members, many=True)
+                return Response(serializer.data)
+
+            # Case 2: If the user is an admin, show all teams
+            elif request.user.is_admin:
+                logging.info("Fetching team members for Admin")
+                teams = Team.objects.all()
+
+                paginator = StandardResultsSetPagination()
+                page = paginator.paginate_queryset(teams, request)
+                if page is not None:
+                    serializer = TeamSerializer(page, many=True)
+                    return paginator.get_paginated_response(serializer.data)
+
+                serializer = TeamSerializer(teams, many=True)
+                return Response(serializer.data)
+
+            # If user is neither org_admin nor admin
+            else:
+                logging.error("Not authorized to view this resource.", str(e))
                 return Response({"detail": "Not authorized to view this resource."}, status=status.HTTP_403_FORBIDDEN)
 
-            # Fetch teams associated with the organization admin
-            teams = Team.objects.filter(org_admin=request.user)
-            if not teams.exists():
-                logging.info("No teams found for org_admin: %s", request.user.email)
-                return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
-
-            # Fetch team members
-            team = teams.first()
-            logging.info("Fetching team members for team: %s by org_admin: %s", team.team_name, request.user.email)
-            team_members = User.objects.filter(team=team.team_name, is_active=True)
-
-            # Pagination logic
-            paginator = StandardResultsSetPagination()
-            page = paginator.paginate_queryset(team_members, request)
-            if page is not None:
-                serializer = UserSerializer(page, many=True)
-                return paginator.get_paginated_response(serializer.data)
-
-            # Return team members without pagination if pagination is not applicable
-            serializer = UserSerializer(team_members, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-        except Exception.ObjectDoesNotExist as e:
-            logging.error("Object does not exist: %s", str(e))
-            return Response({"detail": "Requested resource not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logging.exception("An unexpected error occurred: %s", str(e))
-            return Response({"error": "An error occurred. Please try again later.", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Log the error or print it for debugging
+            print(f"An error occurred: {e}")
+            return Response({"detail": "An internal error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 class TeamCreationView(APIView):
     permission_classes = [IsAuthenticated]
@@ -770,7 +824,7 @@ class TransactionHistoryView(APIView):
         paginator = StandardResultsSetPagination()
 
         try:
-            if request.user.role == 'org_admin' and (request.user.team and request.user.team != 'no team') or request.user.is_admin:
+            if request.user.role == 'org_admin':
                 user_ids = request.data.get('user_id')  # Get list of user IDs from query params
                 if not user_ids:
                     logging.warning("Org Admin %s did not provide user ID.", request.user.email)
@@ -782,6 +836,8 @@ class TransactionHistoryView(APIView):
                     return Response({'error': 'No users found or users are not in your team.'}, status=status.HTTP_404_NOT_FOUND)
 
                 transactions = Transaction.objects.filter(credit__user__in=users)
+            elif request.user.is_admin:
+                transactions = Transaction.objects.all()
             else:
                 transactions = Transaction.objects.filter(credit__user=request.user)
 
@@ -947,44 +1003,21 @@ class AIToolListView(APIView):
 class UseAIToolView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        tool_name = request.data.get('tool_name')
-        if not tool_name:
-            return Response({'error': 'tool_name is required'}, status=status.HTTP_400_BAD_REQUEST)
-
+    def get(self, request):
         try:
-            tool = AITool.objects.get(tool_name=tool_name)
-            credits = Credit.objects.get(user=request.user)
-
-            # Check if there are enough credits
-            if credits.remaining_credits >= tool.credits_required:
-                credits.remaining_credits -= tool.credits_required
-                credits.used_credits += tool.credits_required  # Increment used credits
-                credits.save()
-
-                # Log the transaction
-                Transaction.objects.create(
-                    credit=credits,
-                    transaction_type=Transaction.TransactionType.DEDUCTION,
-                    amount=tool.credits_required,
-                    description=f"Used {tool.tool_name} tool"
-                )
-
-                logging.info("User %s successfully used tool: %s", request.user.email, tool_name)
-                return Response({'message': 'Tool used successfully'}, status=status.HTTP_200_OK)
+            user = request.user
+            team = Team.objects.filter(team_name = user.team)
+            if team.exists():
+                team_members = User.objects.filter(team=team.first().team_name, is_active=True)
+                tool_usage = ToolUsage.objects.filter(used_by__in = team_members).values('tool_name').annotate(total_credits=Sum('credits_used'))
             else:
-                logging.warning("User %s attempted to use tool %s with insufficient credits", request.user.email, tool_name)
-                return Response({'error': 'Insufficient credits'}, status=status.HTTP_400_BAD_REQUEST)
-                
-        except AITool.DoesNotExist:
-            logging.error("Tool %s not found for user %s", tool_name, request.user.email)
-            return Response({'error': 'Tool not found'}, status=status.HTTP_404_NOT_FOUND)
-        except Credit.DoesNotExist:
-            logging.error("Credit record not found for user %s", request.user.email)
-            return Response({'error': 'Credit record not found'}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logging.exception("An error occurred while processing the tool use for user: %s", request.user.email)
-            return Response({'error': 'An unexpected error occurred.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                tool_usage = ToolUsage.objects.filter(used_by = user).values('tool_name').annotate(total_credits=Sum('credits_used'))
+
+            return Response({
+            "tool_usage": tool_usage})
+        except:
+            return Response({'details': 'No tool is being used'}, status=status.HTTP_200_OK)
+        
 
 class AdminDashboardView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -1096,3 +1129,27 @@ class GenerateReportView(APIView):
         except Exception as e:
             logging.exception("Error occurred while generating the report.")
             return Response({'error': 'An error occurred while generating the report.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class StatsView(APIView):
+    permission_classe = [AllowAny]
+    
+    def get(self, request):
+        # Query to get tool usage and total calls per tool
+        tool_usage = ToolUsage.objects.values('tool_name').annotate(total_credits=Sum('credits_used'))
+
+        # Query to get API call logs grouped by day, with total credits and API calls
+        api_log_stats = ApiCallLog.objects.annotate(day=TruncDay('timestamp')).values('day').annotate(
+            total_credits=Sum('credits_used'),
+            api_calls=Count('id')
+        ).order_by('day')
+
+        # Prepare the data in the format required by the frontend
+        tool_usage_data = list(tool_usage)
+        api_log_data = list(api_log_stats) 
+
+        # Return data as JSON
+        return Response({
+            "tool_usage": tool_usage_data,
+            "api_log_stats": api_log_data
+        })

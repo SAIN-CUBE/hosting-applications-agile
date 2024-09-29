@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 # from social_core.pipeline.partial import partial
 
-# AUTH_PROVIDERS = {"email":"email", "google":"google"}
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, password2=None, **extra_fields):
@@ -225,3 +224,13 @@ class ApiCallLog(models.Model):
 
     def __str__(self):
         return f"API call: {self.tool_name} by {self.user.email} via {self.source} on {self.timestamp}"
+    
+class DocumentProcessing(models.Model):
+    tool_name = models.CharField(max_length=255, blank=True, null=True)
+    document_type = models.CharField(max_length=255)
+    document_side = models.CharField(max_length=10)  # 'front' or 'back'
+    confidence_score = models.DecimalField(max_digits=5, decimal_places=2)  # e.g., 95.32 for 95.32%
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Document type detected: {self.document_type} with confidence score: {self.confidence_score}"

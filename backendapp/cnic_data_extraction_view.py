@@ -42,7 +42,6 @@ class ExtractCNICView(APIView):
 
         response_data_list = []
         start_time = time.time()
-        # credits = Credit.objects.get(user)
 
         tokens = 0
         for file in files:
@@ -111,6 +110,8 @@ class ExtractCNICView(APIView):
                 tokens += tokens_used
                 print(f"Tokens Used for {file}: ", tokens_used//100)
                 
+                # Directly handle the credit deduction for this tool usage
+                # self.deduct_credits(request.user, tokens_used//100, "cnic-data-extraction")
 
             except Exception as e:
                 logging.error(f"Exception occurred for {file.name}: {e}")
@@ -387,6 +388,7 @@ class ExtractEncodedCNICView(APIView):
         except Exception as e:
             logging.error(f"Error deducting credits: {e}")
             return Response({"error": f"error in deucting credits {e}"})
+            
         
     def deduct_credits(self, user, tokens_used, tool_name, source):
         """
@@ -545,4 +547,3 @@ class ExtractEncodedCNICView(APIView):
             formatted_data[f"Line_{i+1}"] = line
 
         return formatted_data
-

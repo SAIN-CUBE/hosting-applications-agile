@@ -284,9 +284,26 @@ class TeamCreationSerializer(serializers.ModelSerializer):
       
         
 class UserSerializer(serializers.ModelSerializer):
+    credits_used = serializers.SerializerMethodField()
+    remaining_credits = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name', 'email', 'phone_number', 'role', 'team']
+        fields = ['id', 'first_name', 'last_name', 'email', 'role', 'team', 'credits_used', 'remaining_credits']
+
+    def get_credits_used(self, obj):
+        try:
+            credit = Credit.objects.get(user=obj)
+            return credit.used_credits
+        except Credit.DoesNotExist:
+            return None
+
+    def get_remaining_credits(self, obj):
+        try:
+            credit = Credit.objects.get(user=obj)
+            return credit.remaining_credits
+        except Credit.DoesNotExist:
+            return None
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -360,3 +377,15 @@ class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = ['transaction_type', 'amount', 'description', 'credit']
+        
+class TeamSerializer(serializers.ModelSerializer):
+    team_members = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Team
+        fields = ['team_name', 'org_admin', 'team_members']
+
+    def get_team_members(self, obj):
+        # Get all active users that belong to this team
+        members = User.objects.filter(team=obj.team_name, is_active=True)
+        return UserSerializer(members, many=True).data
