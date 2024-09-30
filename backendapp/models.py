@@ -1,7 +1,9 @@
 from django.db import models
+import re, uuid
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from .logger.logger import logging
 # from social_core.pipeline.partial import partial
 
 
@@ -44,6 +46,7 @@ class User(AbstractBaseUser):
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    sid = models.CharField(max_length=34, unique=True, blank=True, null=True)
     
     objects = UserManager()
     
@@ -63,6 +66,34 @@ class User(AbstractBaseUser):
     @property
     def is_staff(self):
         return self.is_admin
+    
+    def save(self, *args, **kwargs):
+        if not self.sid:  # If the user doesn't have an SID, generate one
+            try:
+                self.sid = self.generate_sid()
+            except Exception as e:
+                logging.error(f"Error generating SID for user {self.email}: {e}")
+                raise e
+        super(User, self).save(*args, **kwargs)
+
+    @staticmethod
+    def generate_sid():
+        """
+        Generates a unique SID with the format: 'US' + UUID without hyphens.
+        """
+        try:
+            return f"US{uuid.uuid4().hex}"
+        except Exception as e:
+            logging.error(f"Failed to generate SID: {e}")
+            raise e
+
+    @staticmethod
+    def validate_sid(sid):
+        """
+        Validates if the SID follows the format: 'US' followed by 32 hexadecimal characters.
+        """
+        pattern = r'^US[a-f0-9]{32}$'
+        return bool(re.match(pattern, sid))
 
 
 class Team(models.Model):
