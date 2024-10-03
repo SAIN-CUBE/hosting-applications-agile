@@ -291,7 +291,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name', 'email', 'role', 'team', 'credits_used', 'remaining_credits']
+        fields = ['id', 'first_name', 'last_name', 'email', 'role', 'team', 'credits_used', 'remaining_credits', 'sid']
 
     def get_credits_used(self, obj):
         credits = Credit.objects.filter(user=obj)
