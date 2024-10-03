@@ -4,84 +4,98 @@ import Layout from '@/app/dashboard/layout';
 import AppBar from '@/components/Dashboard/AppBar';
 import ProtectedDashboard from '@/components/Dashboard/ProtectedDashboard';
 import { motion } from 'framer-motion';
-import { UserCircleIcon, CreditCardIcon, CogIcon } from '@heroicons/react/24/outline';
+import { UserCircleIcon, CreditCardIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
+
+
+
 const ProfilePage = () => {
-    const [user, setUser] = useState(null);
-    const [credits, setCredits] = useState(null);
-    const [transactions, setTransactions] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('profile');
-  
-    const api = axios.create({
-        baseURL: '/api',
-    });
-      
-    api.interceptors.request.use(
-        (config) => {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-            config.headers['Authorization'] = `Bearer ${token}`;
-        }
-        return config;
-        },
-        (error) => {
-        return Promise.reject(error);
-        }
-    );
-    
-    const [formData, setFormData] = useState({
-      first_name: '',
-      last_name: '',
-      email: '',
-      phone_number: '',
-    });
-  
-    useEffect(() => {
-      const fetchUserData = async () => {
-        try {
-          const [userResponse, creditsResponse] = await Promise.all([
-            api.get('/user/details/'),
-            api.get('/credits/')
-          ]);
-          setUser(userResponse.data);
-          setCredits(creditsResponse.data.credits);
-          setTransactions(creditsResponse.data.transactions);
-          setFormData({
-            first_name: userResponse.data.first_name,
-            last_name: userResponse.data.last_name,
-            email: userResponse.data.email,
-            phone_number: userResponse.data.phone_number,
-          });
-          setLoading(false);
-        } catch (err) {
-          toast.error('Failed to fetch user data');
-          setLoading(false);
-        }
-      };
-  
-      fetchUserData();
-    }, []);
-  
-    const handleInputChange = (e) => {
-      setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-  
-    const handleProfileUpdate = async (e) => {
-      e.preventDefault();
+  const [user, setUser] = useState(null);
+  const [credits, setCredits] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('profile');
+
+  const api = axios.create({
+    baseURL: '/api',
+  });
+
+
+  api.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
+    }
+  );
+
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone_number: '',
+  });
+
+  useEffect(() => {
+    const fetchUserData = async () => {
       try {
-        await api.put('/user/update/', {
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          phone_number: formData.phone_number,
+        const [userResponse, creditsResponse] = await Promise.all([
+          api.get('/user/details/'),
+          api.get('/credits/')
+        ]);
+        setUser(userResponse.data);
+        setCredits(creditsResponse.data.credits);
+        setTransactions(creditsResponse.data.transactions);
+        setFormData({
+          first_name: userResponse.data.first_name,
+          last_name: userResponse.data.last_name,
+          email: userResponse.data.email,
+          phone_number: userResponse.data.phone_number,
+          sid: userResponse.data.sid,
         });
-        toast.success('Profile updated successfully');
+        setLoading(false);
       } catch (err) {
-        toast.error('Failed to update profile');
+        toast.error('Failed to fetch user data');
+        setLoading(false);
       }
     };
+
+    fetchUserData();
+  }, []);
+
+  const handleInputChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put('/user/update/', {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        phone_number: formData.phone_number,
+      });
+      toast.success('Profile updated successfully');
+    } catch (err) {
+      toast.error('Failed to update profile');
+    }
+  };
+
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(formData.sid);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
 
   if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
 
@@ -105,9 +119,8 @@ const ProfilePage = () => {
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
-                      className={`w-full text-left px-4 py-2 rounded-md transition-colors ${
-                        activeTab === tab ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
-                      }`}
+                      className={`w-full text-left px-4 py-2 rounded-md transition-colors ${activeTab === tab ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
+                        }`}
                     >
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
@@ -172,6 +185,32 @@ const ProfilePage = () => {
                           readOnly
                           className="w-full bg-gray-700 text-white rounded px-3 py-2"
                         />
+                      </div>
+                      <div className="relative">
+                        <label className="block text-sm font-medium mb-1" htmlFor="sid">
+                          API Key
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            id="sid"
+                            name="sid"
+                            value={formData.sid}
+                            readOnly
+                            className="w-full bg-gray-700 text-white rounded px-3 py-2 pr-10"
+                          />
+                          <button
+                            onClick={copyToClipboard}
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white focus:outline-none"
+                            title="Copy to clipboard"
+                          >
+                            {copied ? (
+                              <ClipboardDocumentCheckIcon className="h-5 w-5" />
+                            ) : (
+                              <ClipboardDocumentIcon className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-1" htmlFor="phone_number">

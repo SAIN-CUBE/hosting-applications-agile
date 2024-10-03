@@ -58,7 +58,7 @@ const Footer = () => {
                             <p className="text-18 text-white mb-10">
                                 No credit card required, access to multiple AI tools
                             </p>
-                            <Link href="/pricing" className="group w-fit bg-white px-10 h-[56px] flex justify-center items-center gap-2.5 rounded-[40px] relative price_button_bg before:inline-block before:absolute before:w-full before:h-full before:scale-x-0 hover:before:scale-x-100 overflow-hidden before:transition-transform before:ease-out before:duration-300 before:origin-right hover:before:origin-left before:z-0">
+                            <Link href="/login" className="group w-fit bg-white px-10 h-[56px] flex justify-center items-center gap-2.5 rounded-[40px] relative price_button_bg before:inline-block before:absolute before:w-full before:h-full before:scale-x-0 hover:before:scale-x-100 overflow-hidden before:transition-transform before:ease-out before:duration-300 before:origin-right hover:before:origin-left before:z-0">
                                 <span className="font-inter font-semibold text-purple relative z-10 group-hover:text-white transition-all duration-300">
                                     Start Free Trial
                                 </span>

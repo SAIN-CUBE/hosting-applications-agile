@@ -70,12 +70,17 @@ const PricingCard = ({ title, price, description, features, isPopular }) => (
         ))}
       </div>
     )}
-    <h1 className="text-18 font-semibold text-white pb-4">{title}</h1>
-    <h2 className="text-4xl text-white">
-      ${price}<span className="text-base leading-[30px]">/ per monthly</span>
+<h2 className="text-4xl text-white">
+      {price === "Custom" ? (
+        <span className="text-3xl">Custom<span className="text-base leading-[30px]"> / per month</span></span>
+      ) : (
+        <>
+          ${price}<span className="text-base leading-[30px]">/ per month</span>
+        </>
+      )}
     </h2>
     <p className="text-white text-[13.8px] pb-8 pt-4">{description}</p>
-    <Link href="/pricing" className="group bg-white w-full h-11 md:h-[56px] flex justify-center items-center gap-2.5 rounded-[40px] relative price_button_bg before:inline-block before:absolute before:w-full before:h-full before:scale-x-0 hover:before:scale-x-100 overflow-hidden before:transition-transform before:ease-out before:duration-300 before:origin-right hover:before:origin-left before:z-0">
+    <Link href="/login" className="group bg-white w-full h-11 md:h-[56px] flex justify-center items-center gap-2.5 rounded-[40px] relative price_button_bg before:inline-block before:absolute before:w-full before:h-full before:scale-x-0 hover:before:scale-x-100 overflow-hidden before:transition-transform before:ease-out before:duration-300 before:origin-right hover:before:origin-left before:z-0">
       <span className="font-inter font-semibold text-purple relative z-10 group-hover:text-white transition-all duration-300">
         Choose This Package
       </span>

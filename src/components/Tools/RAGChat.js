@@ -131,10 +131,28 @@ const RAGChat = () => {
     }
   };
 
-  const handleChangePDF = () => {
-    setFile(null);
-    setChatReady(false);
-    setMessages([]);
+  const handleChangePDF = async () => {
+    if (!file) return;
+    setProcessing(true);
+    
+    try {
+      // Delete the current PDF
+      await axiosInstance.delete('/api/tools/use/chat-with-pdf/delete/', {
+        data: { document_names: [file.name] }
+      });
+      
+      // Reset state
+      setFile(null);
+      setChatReady(false);
+      setMessages([{ type: 'system', content: 'Previous PDF deleted. You can now upload a new one.' }]);
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      if (error.response?.status !== 401) {
+        setMessages(prev => [...prev, { type: 'system', content: 'Error deleting file. Please try again.' }]);
+      }
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const TabContent = () => {
@@ -147,8 +165,9 @@ const RAGChat = () => {
               <button
                 onClick={handleChangePDF}
                 className="text-purple-400 hover:text-purple-300 transition-colors text-sm"
+                disabled={processing}
               >
-                Change PDF
+                {processing ? 'Processing...' : 'Change PDF'}
               </button>
             </div>
           )}

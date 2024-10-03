@@ -176,7 +176,7 @@ const AppBar = () => {
                       <p className="text-sm font-medium text-white">{user ? `${user.first_name} ${user.last_name}` : 'Loading...'}</p>
                       <p className="text-xs text-gray-300">{user ? user.email : 'Loading...'}</p>
                     </div>
-                    <Link href="/profile" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                    <Link href="/dashboard/profile" className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
                       Your Profile
                     </Link>
                     <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">

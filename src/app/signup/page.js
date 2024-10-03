@@ -5,22 +5,36 @@ import { EyeIcon, EyeSlashIcon, LockClosedIcon, EnvelopeIcon, PhoneIcon, UserIco
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Toaster, toast } from 'react-hot-toast';
 
-const schema = yup.object().shape({
-  first_name: yup.string().required('First name is required'),
-  last_name: yup.string().required('Last name is required'),
-  email: yup.string().email('Invalid email').required('Email is required'),
-  phone_number: yup.string().matches(/^((\+\d{1,2}\s?)?1?\-?\.?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|03\d{2}[\s.-]?\d{7})$/, 'Invalid phone number').required('Phone number is required'),
-  password: yup.string().min(8, 'Password must be at least 8 characters').required('Password is required'),
-  password2: yup.string().oneOf([yup.ref('password'), null], 'Passwords must match').required('Confirm password is required'),
+const passwordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+
+const schema = z.object({
+  first_name: z.string().min(1, 'First name is required'),
+  last_name: z.string().min(1, 'Last name is required'),
+  email: z.string().email('Invalid email'),
+  phone_number: z.string().regex(
+    /^((\+\d{1,2}\s?)?1?\-?\.?\s?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|03\d{2}[\s.-]?\d{7})$/,
+    'Invalid phone number'
+  ),
+  password: passwordSchema,
+  password2: z.string()
+}).refine((data) => data.password === data.password2, {
+  message: "Passwords don't match",
+  path: ["password2"],
 });
 
 const SignUpPage = () => {
   const { register, handleSubmit, formState: { errors }, setError } = useForm({
-    resolver: yupResolver(schema),
+    resolver: zodResolver(schema),
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showPassword2, setShowPassword2] = useState(false);
@@ -51,25 +65,16 @@ const SignUpPage = () => {
             type: 'manual',
             message: result.email,
           });
-          toast.error(result.email, {
-            duration: 4000,
-            position: 'top-center',
-          });
         } else if (result.password) {
           setError('password', {
             type: 'manual',
             message: result.password,
           });
-          toast.error(result.password, {
-            duration: 4000,
-            position: 'top-center',
-          });
-        } else {
-          toast.error(result.error || 'Registration failed. Please try again.', {
-            duration: 4000,
-            position: 'top-center',
-          });
         }
+        toast.error(result.error || 'Registration failed. Please try again.', {
+          duration: 4000,
+          position: 'top-center',
+        });
       }
     } catch (error) {
       toast.error('An error occurred. Please try again.', {
@@ -81,7 +86,6 @@ const SignUpPage = () => {
     }
   };
 
-  
   const inputClasses = `
     appearance-none relative block w-full px-3 py-3 border
     placeholder-gray-400 text-gray-200 rounded-lg focus:outline-none 
@@ -126,7 +130,7 @@ const SignUpPage = () => {
             Join us and experience the future of collaboration
           </p>
         </div>
-        <form className="mt-8 -b space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {formFields.map((field) => (
               <div key={field.name} className="relative">
@@ -138,7 +142,7 @@ const SignUpPage = () => {
                     id={field.name}
                     type={field.name.includes('password') ? ((field.name === 'password' ? showPassword : showPassword2) ? 'text' : 'password') : field.type}
                     autoComplete={field.name}
-                    className={`${inputClasses} ${errors[field.name] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-indigo-500 '}`}
+                    className={`${inputClasses} ${errors[field.name] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-indigo-500'}`}
                     placeholder={field.placeholder}
                     {...register(field.name)}
                   />
