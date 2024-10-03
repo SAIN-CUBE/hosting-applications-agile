@@ -98,7 +98,7 @@ def create_or_load_user_vector_store(user):
 
 def setup_rag_chain(vector_store):
     llm = ChatGroq(
-        model="mixtral-8x7b-32768",
+        model="llama-3.1-70b-versatile",
         temperature=0,
         max_tokens=None,
         timeout=None,
@@ -267,6 +267,7 @@ class RAGGETView(APIView):
             self.deduct_credits(request.user, count,  "chat-with-pdf", source)
             logging.info(f"Credits deducted for {request.user.email} for chat-with-pdf")
             logging.info(f"question : {question} \n response:{result['result']}")
+            
             return Response({
                 "answer": result['result'],
                 "time_taken": end_time - start_time
