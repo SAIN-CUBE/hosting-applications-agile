@@ -223,7 +223,7 @@ class RAGGETView(APIView):
 
     def process_request(self, request):
         user = request.user
-        vector_store_path = f'document_embeddings/{user.id}'
+        vector_store_path = f'document_embeddings/{user.sid}'
         
         # Extract the source identifier from custom header or fallback to "api"
         source = request.headers.get('Call-Source', 'api')  # Default to 'api' if header not provided
@@ -366,7 +366,7 @@ class RAGDELETEView(APIView):
             return Response({"error": "No document names provided or invalid format."}, status=status.HTTP_400_BAD_REQUEST)
 
         user = request.user
-        vector_store_path = f'document_embeddings/{user.id}'
+        vector_store_path = f'document_embeddings/{user.sid}'
 
         # Check if the vector store exists
         if not os.path.exists(vector_store_path):
@@ -380,7 +380,7 @@ class RAGDELETEView(APIView):
         for document_name in document_names:
             try:
                 # Try to retrieve the PDFDocument entry from the database for the user
-                pdf_doc = PDFDocument.objects.get(file_path=f'tmp/{user.id}/{document_name}', user=user)
+                pdf_doc = PDFDocument.objects.get(file_path=f'tmp/{user.sid}/{document_name}', user=user)
             except PDFDocument.DoesNotExist:
                 errors.append(f"Document '{document_name}' not found in the database or not owned by the user")
                 continue
@@ -403,7 +403,7 @@ class RAGDELETEView(APIView):
         if not remaining_pdfs:
             # If no remaining PDFs, delete the vector store directory
             shutil.rmtree(vector_store_path)
-            logging.info(f"Deleted vector store as no remaining documents exist for the user {user.id}.")
+            logging.info(f"Deleted vector store as no remaining documents exist for the user {user.sid}.")
             return Response({
                 "message": f"Documents deleted: {deleted_files}. No more documents remain, vector store removed.",
                 "errors": errors
@@ -432,7 +432,7 @@ class RAGDELETEView(APIView):
 
             # Save the updated vector store
             vector_store.save_local(vector_store_path)
-            logging.info(f"Rebuilt the vector store for user {user.id} after deletion.")
+            logging.info(f"Rebuilt the vector store for user {user.sid} after deletion.")
 
             return Response({
                 "message": f"Documents deleted: {deleted_files}.",
