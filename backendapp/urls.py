@@ -10,7 +10,7 @@ from .views import (
     )
 from .cnic_data_extraction_view import ExtractCNICView, ExtractEncodedCNICView
 from .emirates_data_view import EmiratesDataView, EmiratesEncodedImageView
-from .RAG_VIEW import RAGUploadView, RAGGETView, RAGDELETEView
+from .RAG_VIEW_1 import RAGUploadView, RAGGETView, RAGDELETEView
 from rest_framework_simplejwt.views import TokenRefreshView
 from .RAG_PROMPT_VIEW import RAGPROMPTUploadView, RAGPROMPTGETView, RAGPROMPTDELETEView
 
