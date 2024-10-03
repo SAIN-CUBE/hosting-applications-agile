@@ -30,9 +30,71 @@ from django.db import transaction
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncDay
 import logging
-from rest_framework_simplejwt.exceptions import TokenError
 
+from rest_framework_simplejwt.exceptions import TokenError
+from social_django.utils import load_strategy, load_backend
+from social_core.exceptions import MissingBackend
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
+from social_core.exceptions import MissingBackend, AuthTokenError
 # logger = logging.getLogger(__name__)
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        access_token = request.data.get('access_token')
+        if not access_token:
+            return Response({
+                "error": "Google access token not provided. Please try logging in again."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        strategy = load_strategy(request)
+
+        try:
+            backend = load_backend(strategy=strategy, name='google-oauth2', redirect_uri=None)
+        except MissingBackend:
+            return Response({
+                "error": "Google login is not configured properly. Please contact support."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = backend.do_auth(access_token)
+
+            if user:
+                if user.is_active:
+                    refresh = RefreshToken.for_user(user)
+                    return Response({
+                        'tokens': {
+                            'access': str(refresh.access_token),
+                            'refresh': str(refresh),
+                        },
+                        'sid': user.sid,  # Include the user's SID in the response
+                        'msg': 'Login success',
+                    }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        'error': 'Your account is inactive. Please contact support.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({
+                    'error': 'Google authentication failed. Please try again.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+        except AuthTokenError as e:
+            logging.error(f"Google login failed: {str(e)}")
+            return Response({
+                'error': 'Google login failed. Please try again or use a different login method.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            logging.error(f"Unexpected error during Google login: {str(e)}")
+            return Response({
+                'error': 'An unexpected error occurred. Please try again later.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -49,8 +111,6 @@ def get_tokens_for_user(user):
   }
 
 class LoginView(TokenObtainPairView):
-    # serializer_class = CustomTokenObtainPairSerializer
-    logging.info(f"Login user...")
     permission_classes = []
 
     def post(self, request, format=None):
@@ -71,11 +131,13 @@ class LoginView(TokenObtainPairView):
                     'access': access_token,
                     'refresh': refresh_token
                 },
+                'sid': user.sid,  # Include the user's SID in the response
                 'msg': 'Login Success'
             }, status=status.HTTP_200_OK)
         else:
             logging.error("Login failed for email: %s", email)
             return Response({'errors': {'non_field_errors': ['Email or Password is not Valid']}}, status=status.HTTP_404_NOT_FOUND)
+        
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
@@ -139,6 +201,55 @@ class RegisterView(generics.CreateAPIView):
         except Exception as e:
             logging.error(f"Error sending email to {email}: {str(e)}")
             return False
+
+class UserDashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            user = request.user
+            logging.info("Dashboard data requested by user: %s", user.email)
+
+            credit = Credit.objects.filter(user=user).first()
+            credit_data = CreditSerializer(credit).data if credit else None
+
+            dashboard_data = {
+                'name': f"{user.first_name} {user.last_name}",
+                'role': user.role,
+                'email': user.email,
+                'credits': credit_data
+            }
+
+            logging.info("Dashboard data successfully retrieved for user: %s", user.email)
+            return Response(dashboard_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logging.exception("An error occurred while fetching dashboard data for user: %s", request.user.email)
+            return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class UserDetailsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        print("Entering UserDetailsView get method")
+        user = request.user
+        print(f"User: {user}")
+        try:
+            print("Attempting to serialize user data")
+            serializer = UserSerializer(user)
+            print(f"Serialized data: {serializer.data}")
+            logging.info("User details requested for user: %s", user.email)
+            print("Returning successful response")
+            return Response(serializer.data)
+        except Exception as e:
+            print(f"Exception occurred: {str(e)}")
+            logging.exception("An error occurred while fetching user details for user: %s", user.email)
+            print("Returning error response")
+            return Response(
+                {'error': 'An error occurred while fetching user details.', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class VerifyOTPView(generics.CreateAPIView):
     permission_classes = [AllowAny]
@@ -329,44 +440,6 @@ class VisitorOverviewView(APIView):
             return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class UserDashboardView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        try:
-            user = request.user
-            logging.info("Dashboard data requested by user: %s", user.email)
-
-            credit = Credit.objects.filter(user=user).first()
-            credit_data = CreditSerializer(credit).data if credit else None
-
-            dashboard_data = {
-                'name': f"{user.first_name} {user.last_name}",
-                'role': user.role,
-                'email': user.email,
-                'credits': credit_data
-            }
-
-            logging.info("Dashboard data successfully retrieved for user: %s", user.email)
-            return Response(dashboard_data, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logging.exception("An error occurred while fetching dashboard data for user: %s", request.user.email)
-            return Response({'error': 'An error occurred. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-
-class UserDetailsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
-        try:
-            serializer = UserSerializer(user)
-            logging.info("User details requested for user: %s", user.email)
-            return Response(serializer.data)
-        except:
-            logging.exception("An error occurred while fetching user details for user: %s", user.email)
-    
     
 class UserUpdateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -446,52 +519,42 @@ class TeamListView(APIView):
 
     def get(self, request):
         try:
-            # Case 1: If the user is an org_admin, show only their teams and members
             if request.user.role.lower() == 'org_admin':
-                teams = Team.objects.filter(org_admin=request.user)
-                if not teams.exists():
-                    logging.info("No teams found for org_admin: %s", request.user.email)
-                    return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
-
-                # Get all members of the first team (assuming one team per org_admin)
-                
-                team_members = User.objects.filter(team=teams.first().team_name, is_active=True)
-                logging.info("Fetching team members for team: %s by org_admin: %s", teams.team_name, request.user.email)
-
-                paginator = StandardResultsSetPagination()
-                page = paginator.paginate_queryset(team_members, request)
-                if page is not None:
-                    serializer = UserSerializer(page, many=True)
-                    return paginator.get_paginated_response(serializer.data)
-                
-                serializer = UserSerializer(team_members, many=True)
-                return Response(serializer.data)
-
-            # Case 2: If the user is an admin, show all teams
+                return self.handle_org_admin(request)
             elif request.user.is_admin:
-                logging.info("Fetching team members for Admin")
-                teams = Team.objects.all()
-
-                paginator = StandardResultsSetPagination()
-                page = paginator.paginate_queryset(teams, request)
-                if page is not None:
-                    serializer = TeamSerializer(page, many=True)
-                    return paginator.get_paginated_response(serializer.data)
-
-                serializer = TeamSerializer(teams, many=True)
-                return Response(serializer.data)
-
-            # If user is neither org_admin nor admin
+                return self.handle_admin(request)
             else:
-                logging.error("Not authorized to view this resource.", str(e))
+                logging.warning("Unauthorized access attempt by user: %s", request.user.email)
                 return Response({"detail": "Not authorized to view this resource."}, status=status.HTTP_403_FORBIDDEN)
-
         except Exception as e:
-            # Log the error or print it for debugging
-            print(f"An error occurred: {e}")
+            logging.exception("An error occurred in TeamListView: %s", str(e))
             return Response({"detail": "An internal error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def handle_org_admin(self, request):
+        teams = Team.objects.filter(org_admin=request.user)
+        if not teams.exists():
+            logging.info("No teams found for org_admin: %s", request.user.email)
+            return Response({"detail": "No teams found for this user."}, status=status.HTTP_404_NOT_FOUND)
 
+        team = teams.first()
+        team_members = User.objects.filter(team=team.team_name, is_active=True)
+        logging.info("Fetching team members for team: %s by org_admin: %s", team.team_name, request.user.email)
+        
+        return self.paginate_response(request, team_members, UserSerializer)
+
+    def handle_admin(self, request):
+        logging.info("Fetching all teams for Admin: %s", request.user.email)
+        teams = Team.objects.all()
+        return self.paginate_response(request, teams, TeamSerializer)
+
+    def paginate_response(self, request, queryset, SerializerClass):
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = SerializerClass(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        serializer = SerializerClass(queryset, many=True)
+        return Response(serializer.data)
 
 class TeamCreationView(APIView):
     permission_classes = [IsAuthenticated]
@@ -701,7 +764,6 @@ class CreditListView(APIView):
                     {
                         'description': transaction.description,
                         'amount': transaction.amount,
-                        'date': transaction.date
                     }
                     for transaction in transactions
                 ],
@@ -817,6 +879,7 @@ class AssignCreditsView(APIView):
             logging.exception("An error occurred while assigning credits.")
             return Response({'error': 'An error occurred while assigning credits. Please try again later.', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class TransactionHistoryView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -901,7 +964,6 @@ class CreateSubscriptionView(APIView):
             logging.error(f"Error creating subscription: {e}", exc_info=True)
             return Response({'error': 'Failed to create subscription'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class UpdateSubscriptionView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
     # permission_classes = [AllowAny]
@@ -962,8 +1024,7 @@ class DeleteSubscriptionView(APIView):
         except Exception as e:
             # logging.error(f"Error deleting subscription '{plan_name}': {e}", exc_info=True)
             return Response({'error': 'Failed to delete subscription'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+        
 class DeleteFeatureView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
     # permission_classes = [AllowAny]
@@ -977,7 +1038,7 @@ class DeleteFeatureView(APIView):
             feature.delete()
             logging.info(f"Feature '{features}' from subscription '{plan_name}' deleted")
             return Response({'msg': f'Feature "{features}" from subscription "{plan_name}" deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
-
+        
         except Subscription.DoesNotExist:
             logging.error(f"Subscription with plan name '{plan_name}' not found")
             return Response({'error': f'Subscription with plan name "{plan_name}" not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -999,6 +1060,7 @@ class AIToolListView(APIView):
         except Exception as e:
             logging.exception("Error occurred while fetching AI tools list.")
             return Response({'error': 'An error occurred while retrieving the AI tools.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class UseAIToolView(APIView):
     permission_classes = [IsAuthenticated]

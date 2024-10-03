@@ -1,3 +1,4 @@
+import requests
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -13,6 +14,8 @@ import os
 from django.conf import settings
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 User = get_user_model()
 
@@ -282,7 +285,6 @@ class TeamCreationSerializer(serializers.ModelSerializer):
         return user
  
       
-        
 class UserSerializer(serializers.ModelSerializer):
     credits_used = serializers.SerializerMethodField()
     remaining_credits = serializers.SerializerMethodField()
@@ -292,18 +294,16 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'first_name', 'last_name', 'email', 'role', 'team', 'credits_used', 'remaining_credits']
 
     def get_credits_used(self, obj):
-        try:
-            credit = Credit.objects.get(user=obj)
-            return credit.used_credits
-        except Credit.DoesNotExist:
-            return None
+        credits = Credit.objects.filter(user=obj)
+        if credits.exists():
+            return sum(credit.used_credits for credit in credits)
+        return None
 
     def get_remaining_credits(self, obj):
-        try:
-            credit = Credit.objects.get(user=obj)
-            return credit.remaining_credits
-        except Credit.DoesNotExist:
-            return None
+        credits = Credit.objects.filter(user=obj)
+        if credits.exists():
+            return sum(credit.remaining_credits for credit in credits)
+        return None
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:

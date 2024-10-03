@@ -37,7 +37,6 @@ class User(AbstractBaseUser):
     first_name = models.CharField(max_length=30)
     last_name = models.CharField(max_length=30)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     # team = models.ForeignKey("backendapp.Team", on_delete=models.SET_NULL, null=True, blank=True, related_name='members')  # Add team field
     team = models.CharField(max_length=50, blank=True, null=True)
     is_active = models.BooleanField(default=True)
@@ -47,6 +46,8 @@ class User(AbstractBaseUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     sid = models.CharField(max_length=34, unique=True, blank=True, null=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES , default='vistor')
+    loginWithGoogle = models.BooleanField(default=False)  # This line is added
     
     objects = UserManager()
     
@@ -56,7 +57,9 @@ class User(AbstractBaseUser):
     def __str__(self):
         return self.email
 
-
+    def is_admin_user(self):
+        return self.is_admin or self.is_superuser
+    
     def has_perm(self, perm, obj=None):
         return self.is_admin
 

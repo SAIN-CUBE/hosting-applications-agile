@@ -211,8 +211,13 @@ class RAGGETView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [SIDAuthentication]
     
-    # GET: Handle question answering using the existing vector store
+    def post(self, request):
+        return self.process_request(request)
+
     def get(self, request):
+        return self.process_request(request)
+
+    def process_request(self, request):
         user = request.user
         vector_store_path = f'document_embeddings/{user.id}'
         
@@ -236,7 +241,7 @@ class RAGGETView(APIView):
             logging.error(f"Error loading vector store: {e}")
             return Response({"error": "Failed to load docs"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Extract the question from query parameters
+        # Extract the question from request data (works for both GET and POST)
         question = request.data.get('question')
         if not question:
             logging.error("No question provided")
@@ -249,12 +254,8 @@ class RAGGETView(APIView):
         result = rag_chain.invoke({"query": question})
         end_time = time.time()
         
-        # print("response:", result['result'])
         count = len(re.findall(r'\w+', result['result']))
         print(count)
-        
-        # Directly handle the credit deduction for this tool usage
-        # self.deduct_credits(request.user, count, "chat-with-pdf")
         
         try:
             # Directly handle the credit deduction for this tool usage
@@ -269,7 +270,7 @@ class RAGGETView(APIView):
         except Exception as e:
             print(f"Error creating ApiCallLog: {e}")
             return Response({"error": f"error : {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+        
 
     def deduct_credits(self, user, tokens_used, tool_name, source):
         """
@@ -437,3 +438,4 @@ class RAGDELETEView(APIView):
         except Exception as e:
             logging.error(f"Error rebuilding vector store after deletion: {e}")
             return Response({"error": "Failed to rebuild vector store"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        

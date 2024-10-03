@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    LoginView, RegisterView, LogoutView, VisitorOverviewView,
+    GoogleLoginView, LoginView, RegisterView, LogoutView, ResendOTPView, VerifyOTPView, VisitorOverviewView,
     UserDashboardView, UserDetailsView, UserUpdateView, TeamListView, AddTeamMemberView,
     UpdateTeamMemberView, DeleteTeamMemberView, CreditListView, AssignCreditsView, TransactionHistoryView,
     SubscriptionListView, CreateSubscriptionView, AIToolListView, UseAIToolView, AdminDashboardView, AdminUserListView,
@@ -18,6 +18,7 @@ urlpatterns = [
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
+    path('auth/google/', GoogleLoginView.as_view(), name='google-login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/password-reset/', SendPasswordResetEmailView.as_view(), name='send-reset-password-email'),
     path('auth/password-reset/<uid>/<token>/', UserPasswordResetView.as_view(), name='reset-password'),
@@ -27,6 +28,8 @@ urlpatterns = [
     path('user/update/', UserUpdateView.as_view(), name='user_update'),
     path('team/', TeamListView.as_view(), name='team'),
     path('team/add/', AddTeamMemberView.as_view(), name='add member'),
+    path('auth/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
+    path('auth/resend-otp/', ResendOTPView.as_view(), name='resend-otp'),
     path('team/create/', TeamCreationView.as_view(), name='team-create-update'),
     path('team/update/<int:id>/', UpdateTeamMemberView.as_view(), name='team_update'),
     path('team/delete/<int:id>/', DeleteTeamMemberView.as_view(), name='team_delete'),

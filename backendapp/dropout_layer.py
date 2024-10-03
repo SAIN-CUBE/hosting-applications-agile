@@ -1,4 +1,5 @@
-# A simplified version of the original code - https://github.com/abdur75648/UTRNet-High-Resolution-Urdu-Text-Recognition
+import os
+from django.conf import settings# A simplified version of the original code - https://github.com/abdur75648/UTRNet-High-Resolution-Urdu-Text-Recognition
 import torch.nn as nn
 import torch
 import numpy as np
