@@ -48,7 +48,8 @@ class User(AbstractBaseUser):
     sid = models.CharField(max_length=34, unique=True, blank=True, null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES , default='vistor')
     loginWithGoogle = models.BooleanField(default=False)  # This line is added
-    
+    otp = models.CharField(max_length=6, blank=True, null=True)  # New OTP field
+
     objects = UserManager()
     
     USERNAME_FIELD = 'email'
