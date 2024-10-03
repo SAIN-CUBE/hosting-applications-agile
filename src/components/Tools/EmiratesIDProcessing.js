@@ -9,7 +9,7 @@ const EmiratesIDProcessing = () => {
   const [files, setFiles] = useState([]);
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState([]);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('tool');
   const [viewMode, setViewMode] = useState('normal');
   const fileInputRef = useRef(null);
@@ -105,13 +105,28 @@ const EmiratesIDProcessing = () => {
       setFiles([]); // Clear files after successful processing
     } catch (error) {
       console.error('Error processing files:', error);
-      if (error.response?.status !== 401) {
-        setError(error.response?.data?.detail || 'An error occurred while processing the files.');
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        if (error.response.data && error.response.data.error) {
+          setError(error.response.data.error);
+        } else if (error.response.status === 401) {
+          setError("Authentication failed. Please log in again.");
+        } else {
+          setError("An error occurred while processing the files. Please try again.");
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        setError("No response received from the server. Please check your internet connection and try again.");
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        setError("An error occurred while setting up the request. Please try again.");
       }
     } finally {
       setProcessing(false);
     }
   };
+
 
   const ResultCard = ({ data, fileName }) => {
     const [copied, setCopied] = useState(false);
@@ -316,6 +331,7 @@ const EmiratesIDProcessing = () => {
             </motion.div>
           )}
 
+          
           {results.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}

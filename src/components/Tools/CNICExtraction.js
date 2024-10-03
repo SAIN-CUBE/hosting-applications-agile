@@ -16,9 +16,51 @@ export default function MultiCNICExtraction() {
   const videoRef = useRef(null)
   const fileInputRef = useRef(null)
 
+  // Create an axios instance with default headers for both SID and Access Token
+  const axiosInstance = axios.create({
+    headers: {
+      'AuthSID': `SID ${localStorage.getItem('sid')}`,
+      'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+      'Call-Source': 'app'
+    }
+  });
+
+  // Add an interceptor to handle token refresh silently
+  axiosInstance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const originalRequest = error.config;
+      
+      if (error.response?.status === 401 && !originalRequest._retry) {
+        originalRequest._retry = true;
+        
+        try {
+          const refreshToken = localStorage.getItem('refresh_token');
+          const response = await axios.post('/api/token/refresh/', {
+            refresh: refreshToken
+          });
+          
+          const { access } = response.data;
+          localStorage.setItem('access_token', access);
+          axiosInstance.defaults.headers['Authorization'] = `Bearer ${access}`;
+          originalRequest.headers['Authorization'] = `Bearer ${access}`;
+          
+          return axiosInstance(originalRequest);
+        } catch (refreshError) {
+          // Silently handle auth failure
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('sid');
+          window.location.href = '/login';
+          return Promise.reject(refreshError);
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
+
   const onDrop = useCallback((acceptedFiles) => {
     if (processing) {
-      // Abort any ongoing request
       setProcessing(false)
     }
     setFiles(prevFiles => [...prevFiles, ...acceptedFiles])
@@ -41,41 +83,35 @@ export default function MultiCNICExtraction() {
     setError(null);
     setResults([]);
     
-    const controller = new AbortController(); // Using AbortController
-  
     try {
       const newResults = [];
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append('cnic', file);
-  
-        const response = await axios.post('/api/tools/use/cnic-data-extraction/', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-          },
-          signal: controller.signal, // Connect AbortController to Axios request
-          timeout: 600000, // 10-minute timeout in milliseconds
+      const batchSize = 5; // Upload 5 files at a time
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+        const uploadPromises = batch.map(async (file) => {
+          const formData = new FormData();
+          formData.append('cnic', file);
+          const response = await axiosInstance.post('/api/tools/use/cnic-data-extraction/', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+            timeout: 600000, // 10-minute timeout in milliseconds
+          });
+          return { fileName: file.name, data: response.data };
         });
-  
-        newResults.push({ fileName: file.name, data: response.data });
+        const batchResults = await Promise.all(uploadPromises);
+        newResults.push(...batchResults);
       }
       setResults(newResults);
-      setFiles([]); // Clear files after processing
+      setFiles([]); // Clear files after successful processing
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('Request aborted');
-      } else if (error.code === 'ECONNABORTED') {
-        setError('Request timed out. Please try again.');
-      } else {
-        setError(`Failed to extract CNIC data: ${error.message}`);
+      console.error('Error processing files:', error);
+      if (error.response?.status !== 401) {
+        setError(error.response?.data?.detail);
       }
     } finally {
       setProcessing(false);
     }
-  
-    // Function to abort the request
-    return () => controller.abort(); // Aborting the request when needed
   };
 
   const handleFileSelection = () => {
@@ -86,7 +122,6 @@ export default function MultiCNICExtraction() {
     const selectedFiles = Array.from(e.target.files)
     if (selectedFiles.length > 0) {
       if (processing) {
-        // Abort any ongoing request
         setProcessing(false)
       }
       setFiles(prevFiles => [...prevFiles, ...selectedFiles])
@@ -98,7 +133,6 @@ export default function MultiCNICExtraction() {
     setFiles(prevFiles => prevFiles.filter((_, i) => i !== index))
     setResults(prevResults => prevResults.filter((_, i) => i !== index))
   }
-
 
   const ResultCard = ({ fileName, data }) => {
     const [copied, setCopied] = useState(false);
@@ -113,26 +147,36 @@ export default function MultiCNICExtraction() {
     };
   
     const formatData = (data) => {
-      const { data: cnicData } = data.files_data[0];
+      if (viewMode === 'json') {
+        return JSON.stringify(data, null, 2);
+      }
+
+      const { files_data } = data;
       let formattedText = '';
 
-      if (cnicData) {
-        if (cnicData.urdu_text) {
-          for (const [key, value] of Object.entries(cnicData.formatted_data)) {
-            formattedText += `${key}: ${value}\n`;
+      if (files_data && files_data.length > 0) {
+        files_data.forEach((file, index) => {
+          formattedText += `File ${index + 1}: ${file.file}\n\n`;
+          const { data: cnicData } = file;
+          if (cnicData) {
+            if (cnicData.urdu_text) {
+              for (const [key, value] of Object.entries(cnicData.formatted_data)) {
+                formattedText += `${formatKey(key)}: ${value}\n`;
+              }
+            } else {
+              for (const [key, value] of Object.entries(cnicData)) {
+                formattedText += `${formatKey(key)}: ${value}\n`;
+              }
+            }
           }
-        } else {
-          for (const [key, value] of Object.entries(cnicData)) {
-            formattedText += `${formatKey(key)}: ${value}\n`;
-          }
-        }
+          formattedText += '\n';
+        });
       }
   
-      return formattedText;
+      return formattedText.trim();
     };
   
-    const textData = formatData(data);
-    const jsonData = JSON.stringify(data, null, 2);
+    const formattedData = formatData(data);
   
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden mb-6">
@@ -140,7 +184,7 @@ export default function MultiCNICExtraction() {
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-white">{fileName}</h3>
             <button
-              onClick={() => copyToClipboard(viewMode === 'text' ? textData : jsonData)}
+              onClick={() => copyToClipboard(formattedData)}
               className="text-gray-400 hover:text-gray-200 transition-colors"
             >
               {copied ? <CheckIcon className="h-6 w-6" /> : <ClipboardIcon className="h-6 w-6" />}
@@ -148,14 +192,13 @@ export default function MultiCNICExtraction() {
           </div>
           <div className="bg-gray-700 p-5 rounded">
             <div className="text-base leading-relaxed text-gray-200 whitespace-pre-wrap break-words">
-              {viewMode === 'text' ? textData : jsonData}
+              {formattedData}
             </div>
           </div>
         </div>
       </div>
     );
   };
-
 
   const ViewToggle = () => (
     <div className="flex justify-end mb-4">
@@ -229,12 +272,12 @@ export default function MultiCNICExtraction() {
               )}
             </div>
             <button
-          type="submit"
-          className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-102 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          disabled={files.length === 0 || processing}
-        >
-          {processing ? 'Processing...' : 'Extract CNIC Data'}
-        </button>
+              type="submit"
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-102 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={files.length === 0 || processing}
+            >
+              {processing ? 'Processing...' : `Extract CNIC Data (${files.length * 5} credits)`}
+            </button>
           </form>
           
           {error && (
