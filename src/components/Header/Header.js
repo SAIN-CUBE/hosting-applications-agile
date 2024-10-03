@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import logo from "@/assets/images/home-four/logo.webp"
+import logo from "@/assets/images/home-four/logo.svg"
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -40,7 +40,7 @@ const Header = () => {
           <div className="flex h-[95px] items-center justify-between">
             <div className="flex items-center space-x-[100px]">
               <Link href="#">
-                <Image src={logo} alt="logo" width={150} height={50} />
+              <Image width={130} height={100} src={logo} alt="Agile AI Logo" />
               </Link>
               <nav>
                 <ul className="flex items-center space-x-10">

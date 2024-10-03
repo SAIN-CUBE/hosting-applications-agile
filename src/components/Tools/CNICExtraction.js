@@ -52,7 +52,7 @@ export default function MultiCNICExtraction() {
         const response = await axios.post('/api/tools/use/cnic-data-extraction/', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
           },
           signal: controller.signal, // Connect AbortController to Axios request
           timeout: 600000, // 10-minute timeout in milliseconds
@@ -99,7 +99,6 @@ export default function MultiCNICExtraction() {
     setResults(prevResults => prevResults.filter((_, i) => i !== index))
   }
 
-  const totalCredits = files.length * 5
 
   const ResultCard = ({ fileName, data }) => {
     const [copied, setCopied] = useState(false);
@@ -113,19 +112,26 @@ export default function MultiCNICExtraction() {
       });
     };
   
-    const stringifyValue = (value) => {
-      if (typeof value === 'object' && value !== null) {
-        return Array.isArray(value)
-          ? `[${value.map(stringifyValue).join(', ')}]`
-          : `{${Object.entries(value).map(([k, v]) => `${formatKey(k)}: ${stringifyValue(v)}`).join(', ')}}`;
+    const formatData = (data) => {
+      const { data: cnicData } = data.files_data[0];
+      let formattedText = '';
+
+      if (cnicData) {
+        if (cnicData.urdu_text) {
+          for (const [key, value] of Object.entries(cnicData.formatted_data)) {
+            formattedText += `${key}: ${value}\n`;
+          }
+        } else {
+          for (const [key, value] of Object.entries(cnicData)) {
+            formattedText += `${formatKey(key)}: ${value}\n`;
+          }
+        }
       }
-      return String(value);
+  
+      return formattedText;
     };
   
-    const dataToDisplay = data.data || {};
-    const textData = Object.entries(dataToDisplay)
-      .map(([key, value]) => `${formatKey(key)}: ${stringifyValue(value)}`)
-      .join('\n');
+    const textData = formatData(data);
     const jsonData = JSON.stringify(data, null, 2);
   
     return (
@@ -149,7 +155,8 @@ export default function MultiCNICExtraction() {
       </div>
     );
   };
-  
+
+
   const ViewToggle = () => (
     <div className="flex justify-end mb-4">
       <div className="bg-gray-700 rounded-lg p-1 flex">
@@ -222,12 +229,12 @@ export default function MultiCNICExtraction() {
               )}
             </div>
             <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-102 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              disabled={files.length === 0 || processing}
-            >
-              {processing ? 'Processing...' : `Extract CNIC Data (${totalCredits} credits)`}
-            </button>
+          type="submit"
+          className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-102 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          disabled={files.length === 0 || processing}
+        >
+          {processing ? 'Processing...' : 'Extract CNIC Data'}
+        </button>
           </form>
           
           {error && (

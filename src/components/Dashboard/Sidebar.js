@@ -15,21 +15,10 @@ import Link from 'next/link';
 import { FiLogOut } from 'react-icons/fi';
 
 const SidebarItem = React.memo(({ item, isActive, setActiveItem, isCollapsed, textVisible }) => {
-  const router = useRouter();
-
-  const handleClick = useCallback(() => {
-    setActiveItem(item.href);
-    router.prefetch(item.href);
-  }, [item.href, setActiveItem, router]);
-
-  useEffect(() => {
-    router.prefetch(item.href);
-  }, [router, item.href]);
-
   return (
     <Link
       href={item.href}
-      onClick={handleClick}
+      onClick={() => setActiveItem(item.href)}
       className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ease-in-out
         ${isActive 
           ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white' 
@@ -50,49 +39,11 @@ const SidebarItem = React.memo(({ item, isActive, setActiveItem, isCollapsed, te
 
 SidebarItem.displayName = 'SidebarItem';
 
-const ProcessingTimeCircle = React.memo(({ time }) => {
-  const [progress, setProgress] = useState(0);
-  const circumference = 2 * Math.PI * 9;
-  
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress((prevProgress) => (prevProgress + 1) % 101);
-    }, 50);
-    return () => clearInterval(timer);
-  }, []);
-
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
-
-  return (
-    <div className="relative w-14 h-14">
-      <svg className="w-full h-full -rotate-90" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="9" fill="none" stroke="#4B5563" strokeWidth="3" />
-        <circle
-          cx="12"
-          cy="12"
-          r="9"
-          fill="none"
-          stroke="#8B5CF6"
-          strokeWidth="3"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-xs font-medium text-white">{`${time}s`}</span>
-      </div>
-    </div>
-  );
-});
-
-ProcessingTimeCircle.displayName = 'ProcessingTimeCircle';
-
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [textVisible, setTextVisible] = useState(false);
   const pathname = usePathname();
   const [activeItem, setActiveItem] = useState(pathname);
-  const [processingTime] = useState(2.5);
   const sidebarRef = useRef(null);
   const router = useRouter();
 

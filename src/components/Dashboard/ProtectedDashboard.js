@@ -10,12 +10,15 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [sid, setSid] = useState(null);
   const router = useRouter();
 
   const logout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('sid');
     setIsAuthenticated(false);
+    setSid(null);
     router.push('/login');
   };
 
@@ -61,22 +64,26 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const verifyAuth = async () => {
       const accessToken = localStorage.getItem('accessToken');
-      if (!accessToken) {
+      const storedSid = localStorage.getItem('sid');
+      if (!accessToken || !storedSid) {
         setIsAuthenticated(false);
+        setSid(null);
         setIsLoading(false);
         return;
       }
 
       try {
-        await authAxios.get('/api/user/dashboard/', {
+        const response = await authAxios.get('/api/user/dashboard/', {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
         });
         setIsAuthenticated(true);
+        setSid(storedSid);
       } catch (error) {
         console.error('Error verifying authentication:', error);
         setIsAuthenticated(false);
+        setSid(null);
       }
       setIsLoading(false);
     };
@@ -84,8 +91,24 @@ export const AuthProvider = ({ children }) => {
     verifyAuth();
   }, []);
 
+  const login = async (email, password) => {
+    try {
+      const response = await axios.post('/api/auth/login/', { email, password });
+      const { access, refresh, sid } = response.data.token;
+      localStorage.setItem('accessToken', access);
+      localStorage.setItem('refreshToken', refresh);
+      localStorage.setItem('sid', sid);
+      setIsAuthenticated(true);
+      setSid(sid);
+      router.push('/dashboard');
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, logout, login, sid }}>
       {children}
     </AuthContext.Provider>
   );

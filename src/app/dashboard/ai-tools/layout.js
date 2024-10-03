@@ -7,7 +7,6 @@ export default function Layout({ children, title = 'AI Tools Integration' }) {
       <Head>
         <title>{title}</title>
         <meta name="description" content="AI Tools Integration Platform" />
-        <link rel="icon" href="/favicon.ico" />
       </Head>
       <div className="flex flex-col bg-gray-900">
       <div className="flex flex-1 overflow-hidden">

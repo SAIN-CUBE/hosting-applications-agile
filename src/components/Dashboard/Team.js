@@ -3,120 +3,117 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { EllipsisVerticalIcon } from '@heroicons/react/24/solid';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
+import { UsersIcon, PlusCircleIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+const getHeaders = () => {
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+        throw new Error('No access token found');
+    }
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+    };
+};
 
-const initialTeamMembers = [
-    { id: 1, name: 'John Doe', email: 'john@example.com', role: 'Client', credits: 100, avatar: 'https://i.pravatar.cc/150?img=1' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', role: 'Visitor', credits: 50, avatar: 'https://i.pravatar.cc/150?img=2' },
-    { id: 3, name: 'Mike Johnson', email: 'mike@example.com', role: 'Client', credits: 150, avatar: 'https://i.pravatar.cc/150?img=3' },
-    { id: 4, name: 'Sarah Brown', email: 'sarah@example.com', role: 'Org Admin', credits: 200, avatar: 'https://i.pravatar.cc/150?img=4' },
-    { id: 5, name: 'Chris Lee', email: 'chris@example.com', role: 'Visitor', credits: 25, avatar: 'https://i.pravatar.cc/150?img=5' },
-];
-
-const roles = ['Visitor', 'Client', 'Org Admin'];
 
 const Team = () => {
-    const [teamMembers, setTeamMembers] = useState(initialTeamMembers);
+    const [teamMembers, setTeamMembers] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingMember, setEditingMember] = useState(null);
     const [activeMenu, setActiveMenu] = useState(null);
-    const [totalCredits, setTotalCredits] = useState(1000);
-    const [availableCredits, setAvailableCredits] = useState(1000);
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const usedCredits = teamMembers.reduce((sum, member) => sum + member.credits, 0);
-        setAvailableCredits(totalCredits - usedCredits);
-    }, [teamMembers, totalCredits]);
+        fetchTeamMembers();
+    }, []);
 
-    const filteredMembers = teamMembers.filter(member =>
+    const fetchTeamMembers = async () => {
+        try {
+            setLoading(true);
+            const response = await fetch('/api/team/', {
+                headers: getHeaders()
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch team data');
+            }
+            
+            const data = await response.json();
+            setTeamMembers(data);
+        } catch (error) {
+            console.error('Error fetching team data:', error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAddMember = async (newMember) => {
+        try {
+            const response = await fetch('/api/team/add/', {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify(newMember),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to add team member');
+            }
+            const data = await response.json();
+            setTeamMembers([...teamMembers, data]);
+            setShowModal(false);
+        } catch (err) {
+            setError('Failed to add team member');
+        }
+    };
+
+    const handleEditMember = async (updatedMember) => {
+        try {
+            const response = await fetch(`/api/team/update/${updatedMember.id}/`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(updatedMember),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to update team member');
+            }
+            const data = await response.json();
+            setTeamMembers(members => members.map(m => m.id === updatedMember.id ? data : m));
+            setShowModal(false);
+            setEditingMember(null);
+        } catch (err) {
+            setError('Failed to update team member');
+        }
+    };
+
+    const handleDeleteMember = async (id) => {
+        try {
+            const response = await fetch(`/api/team/delete/${id}/`, {
+                method: 'DELETE',
+                headers: getHeaders(),
+            });
+            if (!response.ok) {
+                throw new Error('Failed to delete team member');
+            }
+            setTeamMembers(members => members.filter(m => m.id !== id));
+            setActiveMenu(null);
+        } catch (err) {
+            setError('Failed to delete team member');
+        }
+    };
+
+    const filteredMembers = Array.isArray(teamMembers) 
+    ? teamMembers.filter(member =>
         member.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
         (roleFilter === '' || member.role === roleFilter)
-    );
-
-    const getUniqueAvatar = () => {
-        const randomId = Math.floor(Math.random() * 70) + 1; // generates a random number between 1 and 70
-        return `https://i.pravatar.cc/150?img=${randomId}`;
-    };
-
-    const handleAddMember = (newMember) => {
-        if (newMember.credits > availableCredits) {
-            alert("Not enough credits available!");
-            return;
-        }
-        setTeamMembers([...teamMembers, {
-            ...newMember,
-            id: Date.now(),
-            avatar: getUniqueAvatar()
-        }]);
-        setShowModal(false);
-    };
-
-    const handleEditMember = (updatedMember) => {
-        const oldCredits = teamMembers.find(m => m.id === updatedMember.id).credits;
-        const creditDifference = updatedMember.credits - oldCredits;
-
-        if (creditDifference > availableCredits) {
-            alert("Not enough credits available!");
-            return;
-        }
-
-        setTeamMembers(members => members.map(m => m.id === updatedMember.id ? updatedMember : m));
-        setShowModal(false);
-        setEditingMember(null);
-    };
-
-    const handleDeleteMember = (id) => {
-        setTeamMembers(members => members.filter(m => m.id !== id));
-        setActiveMenu(null);
-    };
-
-    const creditDistribution = roles.map(role => ({
-        role,
-        credits: teamMembers.filter(m => m.role === role).reduce((sum, m) => sum + m.credits, 0)
-    }));
-
-    const CreditDistributionCard = () => (
-        <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
-            <h2 className="text-xl font-semibold mb-4">Credit Distribution</h2>
-            <div className="space-y-4">
-                {creditDistribution.map(({ role, credits }) => (
-                    <div key={role} className="flex items-center">
-                        <div className="w-24 text-gray-400">{role}</div>
-                        <div className="flex-grow bg-gray-700 rounded-full h-4">
-                            <div
-                                className="bg-blue-500 rounded-full h-4"
-                                style={{ width: `${(credits / totalCredits) * 100}%` }}
-                            ></div>
-                        </div>
-                        <div className="w-16 text-right">{credits}</div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-
-    const TotalCreditsCard = () => (
-        <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
-            <h2 className="text-xl font-semibold mb-4">Credit Overview</h2>
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <p className="text-gray-400">Total Credits</p>
-                    <p className="text-2xl font-bold">{totalCredits}</p>
-                </div>
-                <div>
-                    <p className="text-gray-400">Available Credits</p>
-                    <p className="text-2xl font-bold">{availableCredits}</p>
-                </div>
-            </div>
-        </div>
-    );
+      )
+    : [];
 
     const MemberForm = ({ onSubmit, initialData }) => {
-        const [formData, setFormData] = useState(initialData || { name: '', email: '', role: '', credits: '' });
+        const [formData, setFormData] = useState(initialData || { name: '', email: '', role: '' });
 
         const handleChange = (e) => {
             const { name, value } = e.target;
@@ -125,7 +122,7 @@ const Team = () => {
 
         const handleSubmit = (e) => {
             e.preventDefault();
-            onSubmit({ ...formData, credits: parseInt(formData.credits) });
+            onSubmit(formData);
         };
 
         return (
@@ -155,19 +152,9 @@ const Team = () => {
                     required
                 >
                     <option value="">Select Role</option>
-                    {roles.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                    ))}
+                    <option value="Client">Client</option>
+                    <option value="Visitor">Visitor</option>
                 </select>
-                <input
-                    name="credits"
-                    type="number"
-                    value={formData.credits}
-                    onChange={handleChange}
-                    placeholder="Credits"
-                    className="w-full bg-gray-700 rounded-lg px-4 py-2 text-white"
-                    required
-                />
                 <div className="flex justify-end space-x-4">
                     <button type="button" onClick={() => setShowModal(false)} className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition duration-300">
                         Cancel
@@ -180,16 +167,18 @@ const Team = () => {
         );
     };
 
+    if (loading) {
+        return <div className="text-white text-center mt-8">Loading...</div>;
+    }
+
+    if (error) {
+        return <div className="text-red-500 text-center mt-8">{error}</div>;
+    }
 
     return (
         <div className="bg-gray-900 text-white min-h-screen p-4 sm:p-8">
             <div className="max-w-7xl mx-auto">
                 <h1 className="text-3xl font-bold mb-8">Team Management</h1>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <CreditDistributionCard />
-                    <TotalCreditsCard />
-                </div>
 
                 <div className="mb-6 flex flex-col sm:flex-row justify-between items-center">
                     <div className="w-full sm:w-auto mb-4 sm:mb-0 relative">
@@ -209,9 +198,8 @@ const Team = () => {
                             className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="">All Roles</option>
-                            {roles.map(role => (
-                                <option key={role} value={role}>{role}</option>
-                            ))}
+                            <option value="Client">Client</option>
+                            <option value="Visitor">Visitor</option>
                         </select>
                         <button
                             onClick={() => { setEditingMember(null); setShowModal(true); }}
@@ -226,12 +214,11 @@ const Team = () => {
                 <div className="bg-gray-800 rounded-lg overflow-hidden shadow-xl">
                     <div className="overflow-x-auto">
                         <table className="w-full">
-                            <thead className="bg-gray-700 hidden sm:table-header-group">
+                            <thead className="bg-gray-700">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Member</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Email</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Role</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Credits</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
@@ -244,27 +231,19 @@ const Team = () => {
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
                                             transition={{ duration: 0.3 }}
-                                            className="hover:bg-gray-750 flex flex-col sm:table-row"
+                                            className="hover:bg-gray-750"
                                         >
-                                            <td className="px-6 py-4 whitespace-nowrap sm:border-b sm:border-gray-700">
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center">
-                                                    <img className="h-10 w-10 rounded-full mr-3" src={member.avatar} alt={member.name} />
-                                                    <div>
-                                                        <div className="font-medium">{member.name}</div>
-                                                        <div className="text-sm text-gray-400 sm:hidden">{member.email}</div>
-                                                    </div>
+                                                    <div className="font-medium">{member.name}</div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap hidden sm:table-cell">{member.email}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap sm:table-cell">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${member.role === 'Org Admin' ? 'bg-purple-100 text-purple-800' :
-                                                        member.role === 'Client' ? 'bg-green-100 text-green-800' :
-                                                            'bg-yellow-100 text-yellow-800'
-                                                    }`}>
+                                            <td className="px-6 py-4 whitespace-nowrap">{member.email}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${member.role === 'Client' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                                                     {member.role}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap sm:table-cell">Credits: {member.credits}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative">
                                                 <button onClick={() => setActiveMenu(activeMenu === member.id ? null : member.id)} className="text-gray-400 hover:text-white">
                                                     <EllipsisVerticalIcon className="h-5 w-5" />
@@ -325,4 +304,112 @@ const Team = () => {
     );
 }
 
-export default Team;                            
+const NoTeamMembers = ({ onAddFirstMember }) => {
+    return (
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen flex items-center justify-center p-4">
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className="bg-gray-800 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl relative overflow-hidden"
+            >
+                <motion.div
+                    initial={{ y: -20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.2, duration: 0.5 }}
+                >
+                    <UsersIcon className="h-24 w-24 text-blue-500 mx-auto mb-6" />
+                    <h1 className="text-4xl font-bold text-white mb-4">Your Team Awaits</h1>
+                    <p className="text-gray-300 mb-8 text-lg">Start building your dream team today and unlock new possibilities.</p>
+                </motion.div>
+
+                <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="bg-blue-600 text-white px-8 py-4 rounded-full inline-flex items-center justify-center hover:bg-blue-700 transition duration-300 text-lg font-semibold shadow-lg"
+                    onClick={onAddFirstMember}
+                >
+                    <PlusCircleIcon className="h-6 w-6 mr-2" />
+                    Add First Team Member
+                    <ChevronRightIcon className="h-5 w-5 ml-2" />
+                </motion.button>
+            </motion.div>
+        </div>
+    );
+};
+
+const NoAccessMessage = () => (
+    <div className="bg-gray-900 min-h-screen flex items-center justify-center p-4">
+        <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="bg-gray-800 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl"
+        >
+            <UsersIcon className="h-24 w-24 text-yellow-500 mx-auto mb-6" />
+            <h1 className="text-3xl font-bold text-white mb-4">Access Restricted</h1>
+            <p className="text-gray-300 mb-8">You don't have the necessary permissions to view team data. Please contact your administrator for assistance.</p>
+        </motion.div>
+    </div>
+);
+
+const TeamPage = () => {
+    const [teamMembers, setTeamMembers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [hasAccess, setHasAccess] = useState(true);
+
+    const fetchTeamData = async () => {
+        try {
+            setLoading(true);
+            const response = await fetch('/api/team/', {
+                headers: getHeaders()
+            });
+            
+            if (!response.ok) {
+                if (response.status === 403) {
+                    setHasAccess(false);
+                    throw new Error('Access forbidden');
+                }
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to fetch team data');
+            }
+            
+            const data = await response.json();
+            setTeamMembers(data);
+        } catch (error) {
+            console.error('Error fetching team data:', error);
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchTeamData();
+    }, []);
+
+    if (loading) {
+        return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white">Loading...</div>;
+    }
+
+    if (!hasAccess) {
+        return <NoAccessMessage />;
+    }
+
+    if (error) {
+        return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-red-500">Error: {error}</div>;
+    }
+
+    return (
+        <div className="bg-gray-900 min-h-screen">
+          {teamMembers.length === 0 ? (
+                <NoTeamMembers onAddFirstMember={fetchTeamData} />
+            ) : (
+                <Team teamMembers={teamMembers} setTeamMembers={setTeamMembers} />
+            )}
+        </div>
+    );
+};
+
+export default TeamPage;

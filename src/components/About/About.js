@@ -19,35 +19,20 @@ import shape4 from '@/assets/images/home-four/shape-4.webp';
 
 const services = [
   {
-    icon: wtIco1,
+    icon: wtIco3,
     title: 'CNIC Extraction',
     description: 'Automatically extract and process information from Computerized National Identity Cards (CNIC) with high accuracy.',
   },
   {
     icon: wtIco2,
-    title: 'Emirates ID Processing',
+    title: 'UAE Document Processing',
     description: 'Efficiently handle and analyze Emirates ID data, streamlining identity verification processes.',
   },
   {
-    icon: wtIco3,
-    title: 'Credit Management',
-    description: 'Easily manage and allocate credits for AI tool usage across your organization or client base.',
-  },
-  {
-    icon: wtIco4,
-    title: 'Team Collaboration',
-    description: 'Facilitate seamless teamwork with role-based access control and credit allocation features.',
-  },
-  {
-    icon: wtIco5,
-    title: 'Subscription Management',
-    description: 'Flexibly manage subscription plans, including custom packages for diverse client needs.',
-  },
-  {
-    icon: wtIco6,
-    title: 'Advanced Reporting',
-    description: 'Generate comprehensive reports on system usage, credit distribution, and key performance metrics.',
-  },
+    icon: wtIco1,
+    title: 'RAG Chat',
+    description: 'Chat with AI using your own knowledge base',
+  }
 ];
 
 const ServiceItem = ({ icon, title, description, delay }) => (

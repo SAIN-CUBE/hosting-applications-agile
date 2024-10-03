@@ -8,29 +8,89 @@ import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { Toaster, toast } from 'react-hot-toast';
+import { useGoogleLogin } from '@react-oauth/google';
 
 const schema = yup.object().shape({
   email: yup.string().email('Invalid email').required('Email is required'),
   password: yup.string().required('Password is required'),
 });
 
-const GoogleLogin = () => {
+
+const LoginPage = () => {
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: yupResolver(schema),
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleGoogleLogin = () => {
-    console.log('Google login clicked');
-    // This is a placeholder. In a real implementation, you'd initiate the OAuth flow here.
-    toast('Google login is not implemented yet.', {
-      duration: 3000,
-      position: 'top-center',
-      // You can add an icon or style to make it look like an info toast
-      icon: 'ℹ️',
-    });
-  };
-
-  return (
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      const data = { access_token: tokenResponse.access_token }; // Google access token
+  
+      try {
+        const response = await fetch('/api/auth/google/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+  
+        const result = await response.json();
+  
+        if (response.ok) {
+          // Store tokens in localStorage
+          localStorage.setItem('accessToken', result.tokens.access);
+          localStorage.setItem('refreshToken', result.tokens.refresh);
+          localStorage.setItem('sid', result.sid);
+  
+          // Show success toast and redirect
+          toast.success('Login successful! Redirecting...', {
+            duration: 3000,
+            position: 'top-center',
+          });
+          setTimeout(() => router.push('/dashboard'), 1000);
+        } else {
+          const errorMessage = result.error || 'Login failed. Please try again.';
+          
+          // Check for specific error messages from backend and show appropriate toast message
+          if (errorMessage.includes('Google Sign-In')) {
+            toast.error('This account uses Google Sign-In. Please use Google to log in.', {
+              duration: 4000,
+              position: 'top-center',
+            });
+          } else if (errorMessage.includes('email and password')) {
+            toast.error('This account requires email login. Please use your email and password.', {
+              duration: 4000,
+              position: 'top-center',
+            });
+          } else {
+            toast.error(errorMessage, {
+              duration: 4000,
+              position: 'top-center',
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Google login error:', error);
+        toast.error('An error occurred. Please try again.', {
+          duration: 4000,
+          position: 'top-center',
+        });
+      }
+    },
+    onError: () => {
+      toast.error('Google login failed. Please try again.', {
+        duration: 4000,
+        position: 'top-center',
+      });
+    },
+  });
+  
+  
+  // Replace your existing GoogleLogin component with this:
+  const GoogleLoginButton = () => (
     <button
-      onClick={handleGoogleLogin}
+      onClick={() => handleGoogleLogin()}
       className="w-full flex items-center justify-center px-4 py-3 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
     >
       <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -42,43 +102,51 @@ const GoogleLogin = () => {
       Sign in with Google
     </button>
   );
-};
-
-const LoginPage = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm({
-    resolver: yupResolver(schema),
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const onSubmit = async (data) => {
     setIsLoading(true);
-
+  
     try {
       const response = await fetch('/api/auth/login/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-
+  
       const result = await response.json();
-
+  
       if (response.ok) {
         // Store both access and refresh tokens
         localStorage.setItem('accessToken', result.token.access);
         localStorage.setItem('refreshToken', result.token.refresh);
-        
+        localStorage.setItem('sid', result.sid);
+  
+        // Show success toast and redirect
         toast.success('Login successful! Redirecting...', {
           duration: 3000,
           position: 'top-center',
         });
         setTimeout(() => router.push('/dashboard'), 3000);
       } else {
-        toast.error(result.errors?.non_field_errors?.[0] || 'Login failed. Please try again.', {
-          duration: 4000,
-          position: 'top-center',
-        });
+        const errorMessage = result.error || 'Login failed. Please try again.';
+  
+        // Check for specific error messages from backend and show appropriate toast message
+        if (errorMessage.includes('Google Sign-In')) {
+          toast.error('This account uses Google Sign-In. Please use Google to log in.', {
+            duration: 4000,
+            position: 'top-center',
+          });
+        } else if (errorMessage.includes('email and password')) {
+          toast.error('This account requires email login. Please use your email and password.', {
+            duration: 4000,
+            position: 'top-center',
+          });
+        } else {
+          toast.error(errorMessage, {
+            duration: 4000,
+            position: 'top-center',
+          });
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -90,6 +158,7 @@ const LoginPage = () => {
       setIsLoading(false);
     }
   };
+  
 
   const inputClasses = `
     appearance-none relative block w-full px-3 py-3 border
@@ -213,7 +282,12 @@ const LoginPage = () => {
             </motion.button>
           </div>
         </form>
-        <div className="mt-6">
+        <div className="text-center mt-4">
+          <Link href="/signup" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
+            Don't have an account? Sign up
+          </Link>
+        </div>
+        <div className="mt-2">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-700"></div>
@@ -223,13 +297,8 @@ const LoginPage = () => {
             </div>
           </div>
           <div className="mt-6">
-            <GoogleLogin />
+            <GoogleLoginButton />
           </div>
-        </div>
-        <div className="text-center mt-4">
-          <Link href="/signup" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors duration-200">
-            Don't have an account? Sign up
-          </Link>
         </div>
       </motion.div>
     </div>

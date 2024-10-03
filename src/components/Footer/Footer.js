@@ -2,7 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 // Import images
-import footerLogo from '@/assets/images/home-four/logo.webp';
+import footerLogo from '@/assets/images/home-four/logo.svg';
 import shape1 from '@/assets/images/home-four/shape-1.webp';
 import shape2 from '@/assets/images/home-four/shape-2.webp';
 import shape3 from '@/assets/images/home-four/shape-3.webp';
@@ -108,7 +108,7 @@ const Footer = () => {
                 <div className="max-w-6xl mx-auto flex gap-5 flex-wrap justify-between mb-20 px-4">
                     {/* Logo and Social Links */}
                     <div className="w-fit max-w-[300px]">
-                        <Image src={footerLogo} alt="logo" width={180} height={120}/>
+                        <Image src={footerLogo} alt="logo" width={240} height={250}/>
                         <p className="max-w-[300px] text-white my-6">
                             Agile AI provides a cutting-edge hosting application for AI tools, empowering businesses with efficient credit management and user access control.
                         </p>
@@ -159,15 +159,18 @@ const Footer = () => {
                             <h1 className="font-semibold text-18 text-white">Address</h1>
                             <div className="flex gap-2 items-center relative group font-medium text-white/50 hover:text-white hover:underline transition-all duration-300 mt-3.5">
                                 <span className="transition-all duration-300">
-                                     Your Adress Here
+                                Office 502-1, Apricot Tower, Dubai Silicon Oasis. Dubai
                                 </span>
                             </div>
                             <h1 className="font-semibold text-18 text-white mt-6">Contact</h1>
                             <div className="flex gap-2 items-center relative group font-medium text-white/50 hover:text-white hover:underline transition-all duration-300 mt-3.5">
                                 <span className="transition-all duration-300">
-                                    <a href="mailto:info@example.com">info@example.com</a>
-                                    <br />
-                                    +1111111111111
+                                    <a href="mailto:info@example.com">info@agileaihub.ai</a>
+                                </span>
+                            </div>
+                            <div className="flex gap-2 items-center relative group font-medium text-white/50 hover:text-white hover:underline transition-all duration-300 mt-1">
+                                <span className="transition-all duration-300">
+                                <a href="tel:+97145474711">+971 4 547 4711</a>
                                 </span>
                             </div>
                         </div>

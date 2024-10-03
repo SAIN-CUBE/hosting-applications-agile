@@ -68,7 +68,7 @@ const Body = () => {
                 </div>
                 <div className="flex justify-center mb-[100px]">
                   <div className="flex flex-col md:flex-row gap-10 items-center">
-                    <Link href="/pricing">
+                    <Link href="/signup">
                       <div className="home-two-btn-bg py-3.5 group h4_contact_bg border-transparent w-fit mt-2.5">
                         <span className="text-pone text-white group-hover:text-purple transition-all duration-300 font-inter relative z-10">
                           Start Free Trial

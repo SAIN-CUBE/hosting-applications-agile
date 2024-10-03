@@ -1,4 +1,5 @@
 import "@/assets/css/globals.css"
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 export const metadata = {
   title: "Agile AI Hub",
@@ -8,7 +9,16 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="bg-[#0a0118] scroll-smooth">{children}</body>
+      <head>
+        <link rel="icon" href="/Group-1.svg" sizes="32x32" />
+        <link rel="icon" href="/Group-1.svg" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/Group-1.svg" />
+      </head>
+      <body className="bg-[#0a0118] scroll-smooth">
+        <GoogleOAuthProvider clientId="924894828185-0b1ec6g3ofeud3pk3jsc47ce6alb3vv0.apps.googleusercontent.com">
+          {children}
+        </GoogleOAuthProvider>
+      </body>
     </html>
   );
 }

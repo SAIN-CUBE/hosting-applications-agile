@@ -1,40 +1,78 @@
 "use client";
-import { useState, useCallback, useRef } from 'react'
-import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline'
-import { useDropzone } from 'react-dropzone'
-import { motion, AnimatePresence } from 'framer-motion'
-import axios from 'axios'
+import React, { useState, useRef, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CreditCardIcon, ArrowUpTrayIcon, XMarkIcon, PlayIcon, ClipboardIcon, CheckIcon, CodeBracketIcon, ListBulletIcon } from '@heroicons/react/24/outline';
+import axios from 'axios';
 
-export default function EmiratesIDProcessing() {
-  const [files, setFiles] = useState([])
-  const [processing, setProcessing] = useState(false)
-  const [results, setResults] = useState([])
-  const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('tool')
-  const [viewMode, setViewMode] = useState('normal')
-  const videoRef = useRef(null)
-  const fileInputRef = useRef(null)
-  const abortControllerRef = useRef(null)
+const EmiratesIDProcessing = () => {
+  const [files, setFiles] = useState([]);
+  const [processing, setProcessing] = useState(false);
+  const [results, setResults] = useState([]);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('tool');
+  const [viewMode, setViewMode] = useState('normal');
+  const fileInputRef = useRef(null);
+  const videoRef = useRef(null);
+
+  // Create an axios instance with default headers for both SID and Access Token
+  const axiosInstance = axios.create({
+    headers: {
+      'AuthSID': `SID ${localStorage.getItem('sid')}`,
+      'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+      'Call-Source': 'app'
+    }
+  });
+
+  // Add an interceptor to handle token refresh silently
+  axiosInstance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const originalRequest = error.config;
+      
+      if (error.response?.status === 401 && !originalRequest._retry) {
+        originalRequest._retry = true;
+        
+        try {
+          const refreshToken = localStorage.getItem('refresh_token');
+          const response = await axios.post('/api/token/refresh/', {
+            refresh: refreshToken
+          });
+          
+          const { access } = response.data;
+          localStorage.setItem('access_token', access);
+          axiosInstance.defaults.headers['Authorization'] = `Bearer ${access}`;
+          originalRequest.headers['Authorization'] = `Bearer ${access}`;
+          
+          return axiosInstance(originalRequest);
+        } catch (refreshError) {
+          // Silently handle auth failure
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('sid');
+          window.location.href = '/login';
+          return Promise.reject(refreshError);
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
 
   const onDrop = useCallback((acceptedFiles) => {
     if (processing) {
-      // Cancel ongoing processing
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-      setProcessing(false)
+      setProcessing(false);
     }
-    setFiles(prevFiles => [...prevFiles, ...acceptedFiles])
-    setResults([])
-    setError(null)
-  }, [processing])
+    setFiles((prevFiles) => [...prevFiles, ...acceptedFiles]);
+    setResults([]);
+    setError(null);
+  }, [processing]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'image/*': [], 'application/pdf': [] },
     noClick: true,
     noKeyboard: true,
-  })
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,9 +82,6 @@ export default function EmiratesIDProcessing() {
     setError(null);
     setResults([]);
   
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-  
     try {
       const newResults = [];
       const batchSize = 5; // Upload 5 files at a time
@@ -55,9 +90,10 @@ export default function EmiratesIDProcessing() {
         const uploadPromises = batch.map(async (file) => {
           const formData = new FormData();
           formData.append('file', file);
-          const response = await axios.post('/api/tools/use/emirates-id-processing/', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            signal: controller.signal,
+          const response = await axiosInstance.post('/api/tools/use/emirates-id-processing/', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
             timeout: 600000,
           });
           return { fileName: file.name, data: response.data };
@@ -68,17 +104,14 @@ export default function EmiratesIDProcessing() {
       setResults(newResults);
       setFiles([]); // Clear files after successful processing
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('Request aborted');
-      } else if (error.code === 'ECONNABORTED') {
-        setError('Request timed out. Please try again.');
-      } else {
+      console.error('Error processing files:', error);
+      if (error.response?.status !== 401) {
         setError(error.response?.data?.detail || 'An error occurred while processing the files.');
       }
     } finally {
       setProcessing(false);
     }
-  };  
+  };
 
   const ResultCard = ({ data, fileName }) => {
     const [copied, setCopied] = useState(false);
@@ -89,16 +122,19 @@ export default function EmiratesIDProcessing() {
       }
       
       let result = '';
-      if (obj.images_results && obj.images_results.length > 0) {
-        obj.images_results.forEach((image, index) => {
-          result += `Image ${index + 1}\n`;
-          for (const [key, value] of Object.entries(image.detected_data)) {
-            result += `${key}: ${value}\n`;
-          }
-          result += '\n';
+      if (obj.files_results && obj.files_results.length > 0) {
+        obj.files_results.forEach((file) => {
+          result += `File: ${file.file_name}\n\n`;
+          file.file_results.forEach((imageResult, index) => {
+            result += `Image ${index + 1}\n`;
+            result += `Document Type: ${imageResult.image_metadata.Document_Type}\n`;
+            result += `Side: ${imageResult.image_metadata.side}\n`;
+            for (const [key, value] of Object.entries(imageResult.detected_data)) {
+              result += `${key}: ${value}\n`;
+            }
+            result += '\n';
+          });
         });
-      } else {
-        result = 'No image results available.\n';
       }
       return result.trim();
     };
@@ -118,7 +154,7 @@ export default function EmiratesIDProcessing() {
       }
       return name;
     };
-
+  
     return (
       <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden p-6">
         <div className="flex justify-between items-center mb-4">
@@ -136,21 +172,29 @@ export default function EmiratesIDProcessing() {
               {formattedData}
             </pre>
           ) : (
-            data.images_results && data.images_results.length > 0 ? (
-              data.images_results.map((imageResult, index) => (
-                <div key={index} className="bg-gray-700 rounded-lg p-4 mb-4">
-                  <h3 className="text-lg font-semibold text-white mb-2">Image {index + 1}</h3>
-                  <div className="text-gray-300">
-                    {Object.entries(imageResult.detected_data).map(([key, value]) => (
-                      <p key={key} className="mb-1">
-                        <span className="font-medium">{key}:</span> {value || 'N/A'}
+            data.files_results && data.files_results.length > 0 && (
+              data.files_results.map((file, fileIndex) => (
+                <div key={fileIndex} className="">
+                  {file.file_results.map((imageResult, imageIndex) => (
+                    <div key={imageIndex} className="bg-gray-700 rounded-lg p-4 mb-4">
+                      <h4 className="text-md font-semibold text-white mb-2">Image {imageIndex + 1}</h4>
+                      <p className="text-gray-300 mb-1">
+                        <span className="font-medium">Document Type:</span> {imageResult.image_metadata.Document_Type}
                       </p>
-                    ))}
-                  </div>
+                      <p className="text-gray-300 mb-1">
+                        <span className="font-medium">Side:</span> {imageResult.image_metadata.side}
+                      </p>
+                      <div className="text-gray-300">
+                        {Object.entries(imageResult.detected_data).map(([key, value]) => (
+                          <p key={key} className="mb-1">
+                            <span className="font-medium">{key}:</span> {value || 'N/A'}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))
-            ) : (
-              <p className="text-gray-300">No image results available.</p>
             )
           )}
         </div>
@@ -158,32 +202,27 @@ export default function EmiratesIDProcessing() {
     );
   };
 
-  
   const handleFileSelection = () => {
-    fileInputRef.current.click()
-  }
+    fileInputRef.current.click();
+  };
 
   const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files)
+    const selectedFiles = Array.from(e.target.files);
     if (selectedFiles.length > 0) {
       if (processing) {
-        // Cancel ongoing processing
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort()
-        }
-        setProcessing(false)
+        setProcessing(false);
       }
-      setFiles(prevFiles => [...prevFiles, ...selectedFiles])
-      setResults([])
+      setFiles((prevFiles) => [...prevFiles, ...selectedFiles]);
+      setResults([]);
     }
-  }
+  };
 
   const removeFile = (index) => {
-    setFiles(prevFiles => prevFiles.filter((_, i) => i !== index))
-    setResults(prevResults => prevResults.filter((_, i) => i !== index))
-  }
+    setFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+    setResults((prevResults) => prevResults.filter((_, i) => i !== index));
+  };
 
-  const totalCredits = files.length * 8
+  const totalCredits = files.length * 8;
 
   const ViewToggle = () => (
     <div className="flex justify-end mb-4">
@@ -229,7 +268,7 @@ export default function EmiratesIDProcessing() {
                   >
                     Select Files
                   </button>
-                    <input
+                  <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*,application/pdf"
@@ -284,16 +323,16 @@ export default function EmiratesIDProcessing() {
               exit={{ opacity: 0, y: -20 }}
               className="mt-12"
             >
-              <ViewToggle/>
+              <ViewToggle />
               <div className="space-y-6">
                 {results.map((result, index) => (
-                  <ResultCard key={index} fileName={result.fileName} data={result.data} index={index} />
+                  <ResultCard key={index} fileName={result.fileName} data={result.data} />
                 ))}
               </div>
             </motion.div>
           )}
         </div>
-      )
+      );
     } else {
       return (
         <div className="space-y-8">
@@ -381,3 +420,5 @@ export default function EmiratesIDProcessing() {
     </div>
   )
 }
+
+export default EmiratesIDProcessing;
