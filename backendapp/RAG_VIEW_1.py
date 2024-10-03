@@ -79,7 +79,7 @@ def load_and_split_pdf(pdf_path):
 
 
 def create_or_load_user_vector_store(user):
-    vector_store_path = f'document_embeddings/{user.id}'
+    vector_store_path = f'document_embeddings/{user.sid}'
 
     try:
         # Check if vector store already exists
@@ -111,7 +111,7 @@ def setup_rag_chain(vector_store):
     #     ("human", "Context: {context}\n\nQuestion: {question}")
     # ])
     prompt = ChatPromptTemplate.from_messages([
-    ("system", f"You are an AI assistant tasked with answering questions based solely on the provided context. Your goal is to give direct and concise answers to the user's questions without adding explanations or references about where the information was found. Do not repeat the context or the question in your answer. If the answer is not in the context, simply state 'I don't know.' Do not provide any additional context or details beyond the direct answer. here is the context: {context}"),
+    ("system", f"You are an AI assistant tasked with answering questions based solely on the provided context. Your goal is to give direct and concise answers to the user's questions without adding explanations or references about where the information was found. Do not repeat the context or the question in your answer. If the answer is not in the context, simply state 'I don't know.' Do not provide any additional context or details beyond the direct answer."),
     ("human", "{question}")
     ])
     
@@ -145,7 +145,7 @@ class RAGUploadView(APIView):
 
         for file in files:
             user = request.user
-            prev_file_path = f'tmp/{user.id}/{file.name}'
+            prev_file_path = f'tmp/{user.sid}/{file.name}'
 
             # Check if file is a valid PDF
             if not file.name.lower().endswith('.pdf'):
@@ -192,7 +192,7 @@ class RAGUploadView(APIView):
                     vector_store = FAISS.from_documents(docs, HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"))
 
                 # Save the updated vector store to disk
-                vector_store.save_local(f'document_embeddings/{user.id}')
+                vector_store.save_local(f'document_embeddings/{user.sid}')
                 success_files.append(file.name)
 
             except Exception as e:
