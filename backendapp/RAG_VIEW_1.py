@@ -112,7 +112,7 @@ def setup_rag_chain(vector_store):
     # ])
     prompt = ChatPromptTemplate.from_messages([
     ("system", f"You are an AI assistant tasked with answering questions based solely on the provided context. Your goal is to give direct and concise answers to the user's questions without adding explanations or references about where the information was found. Do not repeat the context or the question in your answer. If the answer is not in the context, simply state 'I don't know.' Do not provide any additional context or details beyond the direct answer."),
-    ("human", "{question}")
+    ("human",  "Context: {context}\n\nQuestion: {question}")
     ])
     
     rag_chain = RetrievalQA.from_chain_type(
