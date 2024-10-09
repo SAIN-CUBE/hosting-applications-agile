@@ -17,7 +17,7 @@ const RAGChat = () => {
   const [chatReady, setChatReady] = useState(false);
   const [activeTab, setActiveTab] = useState('chat');
   const [copiedIndex, setCopiedIndex] = useState(null);
-  
+
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -36,21 +36,21 @@ const RAGChat = () => {
     (response) => response,
     async (error) => {
       const originalRequest = error.config;
-      
+
       if (error.response?.status === 401 && !originalRequest._retry) {
         originalRequest._retry = true;
-        
+
         try {
           const refreshToken = localStorage.getItem('refresh_token');
           const response = await axios.post('/api/token/refresh/', {
             refresh: refreshToken
           });
-          
+
           const { access } = response.data;
           localStorage.setItem('access_token', access);
           axiosInstance.defaults.headers['Authorization'] = `Bearer ${access}`;
           originalRequest.headers['Authorization'] = `Bearer ${access}`;
-          
+
           return axiosInstance(originalRequest);
         } catch (refreshError) {
           localStorage.removeItem('access_token');
@@ -72,27 +72,17 @@ const RAGChat = () => {
     }
   }, [copiedIndex]);
 
-  // Effect for scrolling to bottom on new messages
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      const { scrollHeight, clientHeight } = chatContainerRef.current;
-      chatContainerRef.current.scrollTo({
-        top: scrollHeight - clientHeight,
-        behavior: 'smooth'
-      });
-    }
-  }, [messages]);
 
   const renderMessage = (message, index) => {
     const isAI = message.type === 'ai';
-    
+
     // Function to process text and combine numbered points with their content
     const processText = (text) => {
       return text.replace(/^(\d+\.)\s*(.*?)$/gm, (match, number, content) => {
         return `${number} ${content}`;
       });
     };
-  
+
     return (
       <motion.div
         key={index}
@@ -102,9 +92,8 @@ const RAGChat = () => {
         transition={{ duration: 0.2 }}
         className={`flex ${isAI ? 'justify-start' : 'justify-end'} mb-4`}
       >
-        <div className={`max-w-3/4 p-4 rounded-lg ${
-          isAI ? 'bg-gray-700' : 'bg-purple-600'
-        }`}>
+        <div className={`max-w-3/4 p-4 rounded-lg ${isAI ? 'bg-gray-700' : 'bg-purple-600'
+          }`}>
           <ReactMarkdown
             components={{
               h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mb-4" {...props} />,
@@ -204,50 +193,67 @@ const RAGChat = () => {
     noKeyboard: true,
   });
 
+
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      const scrollHeight = chatContainerRef.current.scrollHeight;
+      const height = chatContainerRef.current.clientHeight;
+      const maxScrollTop = scrollHeight - height;
+      chatContainerRef.current.scrollTop = maxScrollTop > 0 ? maxScrollTop : 0;
+    }
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
     const input = inputRef.current.value.trim();
     if (input === '' || !file) return;
-  
-    const newMessage = { type: 'user', content: input, timestamp: new Date() };
-    setMessages(prev => [...prev, newMessage]);
+
+    const newUserMessage = { type: 'user', content: input, timestamp: new Date() };
+    setMessages(prevMessages => [...prevMessages, newUserMessage]);
     inputRef.current.value = '';
-  
+    scrollToBottom();
+
     setProcessing(true);
     try {
       const response = await axiosInstance.post('/api/tools/use/chat-with-pdf/chat/', {
         question: input
       });
-  
+
       if (response.data && response.data.answer) {
-        const aiMessage = { type: 'ai', content: response.data.answer, timestamp: new Date() };
-        setMessages(prev => [...prev, aiMessage]);
+        const newAIMessage = { type: 'ai', content: response.data.answer, timestamp: new Date() };
+        setMessages(prevMessages => [...prevMessages, newAIMessage]);
+        scrollToBottom();
       }
     } catch (error) {
       console.error('Error sending message:', error);
       if (error.response?.status !== 401) {
         const errorMessage = error.response?.data?.error || 'An error occurred while processing your request.';
-        setMessages(prev => [...prev, { type: 'system', content: errorMessage, timestamp: new Date() }]);
+        setMessages(prevMessages => [...prevMessages, { type: 'system', content: errorMessage, timestamp: new Date() }]);
+        scrollToBottom();
       }
     } finally {
       setProcessing(false);
     }
   };
-  
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const handleFileUpload = async () => {
     if (!file) return;
     setProcessing(true);
-    
+
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       await axiosInstance.post('/api/tools/use/chat-with-pdf/upload/', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         }
       });
-      
+
       setChatReady(true);
       setMessages([{ type: 'system', content: `File "${file.name}" is ready. You can now start chatting!`, timestamp: new Date() }]);
     } catch (error) {
@@ -263,12 +269,12 @@ const RAGChat = () => {
   const handleChangePDF = async () => {
     if (!file) return;
     setProcessing(true);
-    
+
     try {
       await axiosInstance.delete('/api/tools/use/chat-with-pdf/delete/', {
         data: { document_names: [file.name] }
       });
-      
+
       setFile(null);
       setChatReady(false);
       setMessages([{ type: 'system', content: 'Previous PDF deleted. You can now upload a new one.', timestamp: new Date() }]);
@@ -298,15 +304,26 @@ const RAGChat = () => {
               </button>
             </div>
           )}
-          <div 
+          <div
             ref={chatContainerRef}
             className="flex-1 mb-4 space-y-4 overflow-y-auto max-h-[60vh] scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
           >
-            <AnimatePresence>
-              {messages.map((message, index) => renderMessage(message, index))}
+            <AnimatePresence initial={false}>
+              {messages.map((message, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {renderMessage(message, index)}
+                </motion.div>
+              ))}
             </AnimatePresence>
             <div ref={messagesEndRef} />
           </div>
+
           {chatReady && (
             <form onSubmit={handleSend} className="flex space-x-2">
               <input
@@ -314,6 +331,7 @@ const RAGChat = () => {
                 type="text"
                 placeholder="Type your message..."
                 className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                disabled={processing}
               />
               <button
                 type="submit"
@@ -383,7 +401,7 @@ const RAGChat = () => {
   }
 
   return (
-    <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl p-8 shadow-2xl max-w-4xl mx-auto flex flex-col overflow-hidden">      
+    <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl p-8 shadow-2xl max-w-4xl mx-auto flex flex-col overflow-hidden">
       <div className="flex flex-col md:flex-row items-center justify-between mb-10 space-y-4 md:space-y-0">
         <div className="flex items-center">
           <ChatBubbleLeftEllipsisIcon className="h-12 w-12 mr-4 text-purple-400" />
@@ -396,21 +414,19 @@ const RAGChat = () => {
         <div className="flex space-x-1 rounded-xl bg-gray-700/50 p-1">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white transition-all ${
-              activeTab === 'chat'
-                ? 'bg-gray-900 shadow'
-                : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
-            }`}
+            className={`w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white transition-all ${activeTab === 'chat'
+              ? 'bg-gray-900 shadow'
+              : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
+              }`}
           >
             Chat
           </button>
           <button
             onClick={() => setActiveTab('about')}
-            className={`w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white transition-all ${
-              activeTab === 'about'
-                ? 'bg-gray-900 shadow'
-                : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
-            }`}
+            className={`w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-white transition-all ${activeTab === 'about'
+              ? 'bg-gray-900 shadow'
+              : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
+              }`}
           >
             About
           </button>
