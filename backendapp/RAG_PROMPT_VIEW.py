@@ -298,7 +298,7 @@ class RAGPROMPTGETView(APIView):
         """
         try:
             # Fetch the tool details
-            tool = AITool.objects.get(tool_name=tool_name)
+            # tool = AITool.objects.get(tool_name=tool_name)
 
             # Get the user's credits
             credits = Credit.objects.get(user=user)
@@ -357,9 +357,9 @@ class RAGPROMPTGETView(APIView):
                 logging.warning(f"User {user.email} has insufficient credits for {tool_name}.")
                 raise ValueError("Insufficient credits")
 
-        except AITool.DoesNotExist:
-            logging.error(f"Tool {tool_name} not found.")
-            raise ValueError("Tool not found")
+        # except AITool.DoesNotExist:
+        #     logging.error(f"Tool {tool_name} not found.")
+        #     raise ValueError("Tool not found")
             
         except Credit.DoesNotExist:
             logging.error(f"Credit record for user {user.email} not found.")

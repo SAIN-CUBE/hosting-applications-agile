@@ -195,13 +195,13 @@ class Log(models.Model):
         return f"Log for {self.user.email} at {self.timestamp}"
 
 class AITool(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='AItools', null=True, blank=True)
+    # user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='AItools', null=True, blank=True)
     tool_name = models.CharField(max_length=100)
-    api_endpoint = models.URLField()
-    credits_required = models.IntegerField()
+    # api_endpoint = models.URLField()
+    # credits_required = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    transactions = models.ManyToManyField(Transaction, related_name='ai_tools')
+    # transactions = models.ManyToManyField(Transaction, related_name='ai_tools')
 
     def __str__(self):
         return self.tool_name
