@@ -1215,3 +1215,34 @@ class StatsView(APIView):
             "tool_usage": tool_usage_data,
             "api_log_stats": api_log_data
         })
+
+class CreditUsage(APIView):
+    permission_classe = [AllowAny]
+    
+    def get(self, request):
+        user = request.user
+        
+        if user.role.lower() == "org_admin":
+            team_members = User.objects.filter(team=user.team, is_active=True)
+            
+            # Query to get credits usage for an org_admin
+            credit_usage = ToolUsage.objects.filter(used_by__in=team_members).annotate(
+                day=TruncDay('used_at')
+                ).values('day').annotate(
+                    total_credits=Sum('credits_used')
+                    ).order_by('day')
+        else:
+            # For non-org_admin users, show credits usage for the single user
+            credit_usage = ToolUsage.objects.filter(used_by=user).annotate(
+                day=TruncDay('used_at')
+            ).values('day').annotate(
+                total_credits=Sum('credits_used')
+            ).order_by('day')
+        
+        # Prepare the data in the format required by the frontend
+        credit_usage_data = list(credit_usage)
+
+        # Return data as JSON
+        return Response({
+            "credits_used": credit_usage_data
+        })

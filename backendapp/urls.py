@@ -6,7 +6,7 @@ from .views import (
     SubscriptionListView, CreateSubscriptionView, AIToolListView, UseAIToolView, AdminDashboardView, AdminUserListView,
     DelegateAdminPrivilegesView, UserActivityLogView, GenerateReportView, SendPasswordResetEmailView,
     UserPasswordResetView, UpdateSubscriptionView, DeleteSubscriptionView, DeleteFeatureView, TeamCreationView,
-    StatsView
+    StatsView, CreditUsage
     )
 from .cnic_data_extraction_view import ExtractCNICView, ExtractEncodedCNICView
 from .emirates_data_view import EmiratesDataView, EmiratesEncodedImageView
@@ -59,4 +59,5 @@ urlpatterns = [
     path('logs/', UserActivityLogView.as_view(), name='user_logs'),
     path('reports/', GenerateReportView.as_view(), name='generate_report'),
     path('stats/', StatsView.as_view(), name='stats-report'),
+    path('credits-usage/', CreditUsage.as_view(), name='stats-report'),
 ]
